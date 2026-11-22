@@ -1,0 +1,198 @@
+import { PayslipTemplate } from '../types';
+
+/**
+ * Cleanly combines address parts without duplicates or trailing commas.
+ */
+export function formatFullAddress(
+  address?: string,
+  cityPincode?: string,
+  country?: string
+): string {
+  const parts: string[] = [];
+  const cleanAddr = (address || '').trim();
+  const cleanCity = (cityPincode || '').trim();
+  const cleanCountry = (country || '').trim();
+
+  if (cleanAddr) parts.push(cleanAddr);
+  if (cleanCity && !cleanAddr.toLowerCase().includes(cleanCity.toLowerCase())) {
+    parts.push(cleanCity);
+  }
+  if (cleanCountry && !cleanAddr.toLowerCase().includes(cleanCountry.toLowerCase())) {
+    parts.push(cleanCountry);
+  }
+  return parts.filter(Boolean).join(', ');
+}
+
+export const PIONEER_OFFICIAL_TEMPLATE: PayslipTemplate = {
+  id: 'template-pioneer-official',
+  name: 'Pioneer Official Reference',
+  description: 'Visual reproduction of Pioneer Corporation Coimbatore payslip with green Net Pay box and two-column statutory layout.',
+  isDefault: true,
+  companyName: 'PIONEER CORPORATION',
+  companyAddress: '358, Mettupalayam Road, Tatabad',
+  cityPincode: 'Coimbatore-641043',
+  country: 'India',
+  logoUrl: 'default-pioneer',
+  payPeriod: 'October 2026',
+  payDate: '01/11/2026',
+  themeColor: 'emerald',
+  summaryFields: [
+    { id: 'f_name', label: 'Employee Name', fieldKey: 'employeeName' },
+    { id: 'f_id', label: 'Employee ID', fieldKey: 'employeeId' },
+    { id: 'f_period', label: 'Pay Period', fieldKey: 'payPeriod' },
+    { id: 'f_date', label: 'Pay Date', fieldKey: 'payDate' },
+  ],
+  statutoryFields: [
+    { id: 'st_uan', label: 'UAN Number', fieldKey: 'uanNumber' },
+    { id: 'st_doj', label: 'DOJ', fieldKey: 'doj' },
+    { id: 'st_dept', label: 'Department', fieldKey: 'department' },
+    { id: 'st_esi', label: 'ESI Number', fieldKey: 'esiNumber' },
+    { id: 'st_desig', label: 'Designation', fieldKey: 'designation' },
+    { id: 'st_pfesi', label: 'PF&ESI applicable', fieldKey: 'pfEsiApplicable' },
+  ],
+  earningsList: [
+    { id: 'e_basic', label: 'Basic', fieldKey: 'basic' },
+    { id: 'e_hra', label: 'House Rent Allowance', fieldKey: 'hra' },
+    { id: 'e_wa', label: 'Water allowance', fieldKey: 'waterAllowance' },
+    { id: 'e_inc', label: 'Incentive', fieldKey: 'incentive' },
+    { id: 'e_other', label: 'Other Allowance', fieldKey: 'otherAllowance' },
+  ],
+  deductionsList: [
+    { id: 'd_it', label: 'Income Tax', fieldKey: 'incomeTax' },
+    { id: 'd_pf', label: 'Provident Fund', fieldKey: 'providentFund' },
+    { id: 'd_esi', label: 'ESI', fieldKey: 'esi' },
+    { id: 'd_prev', label: 'Previous Month', fieldKey: 'previousMonth' },
+    { id: 'd_other', label: 'Other deduction', fieldKey: 'otherDeduction' },
+  ],
+  footerText: '-- This is a system-generated document. --',
+  showAmountInWords: true,
+  createdAt: '2026-11-14',
+};
+
+export const CORPORATE_MINIMAL_TEMPLATE: PayslipTemplate = {
+  id: 'template-corporate-minimal',
+  name: 'Corporate Clean Minimal',
+  description: 'Minimalist enterprise layout with refined dark navy styling and high density.',
+  isDefault: false,
+  companyName: 'PIONEER CORPORATION',
+  companyAddress: '358, Mettupalayam Road, Tatabad',
+  cityPincode: 'Coimbatore-641043',
+  country: 'India',
+  logoUrl: 'default-pioneer',
+  payPeriod: 'November 2026',
+  payDate: '01/12/2026',
+  themeColor: 'navy',
+  summaryFields: [
+    { id: 'f_name', label: 'Employee Name', fieldKey: 'employeeName' },
+    { id: 'f_id', label: 'Employee ID', fieldKey: 'employeeId' },
+    { id: 'f_period', label: 'Pay Period', fieldKey: 'payPeriod' },
+    { id: 'f_date', label: 'Pay Date', fieldKey: 'payDate' },
+  ],
+  statutoryFields: [
+    { id: 'st_uan', label: 'UAN Number', fieldKey: 'uanNumber' },
+    { id: 'st_doj', label: 'DOJ', fieldKey: 'doj' },
+    { id: 'st_dept', label: 'Department', fieldKey: 'department' },
+    { id: 'st_esi', label: 'ESI Number', fieldKey: 'esiNumber' },
+    { id: 'st_desig', label: 'Designation', fieldKey: 'designation' },
+    { id: 'st_pfesi', label: 'PF&ESI applicable', fieldKey: 'pfEsiApplicable' },
+  ],
+  earningsList: [
+    { id: 'e_basic', label: 'Basic', fieldKey: 'basic' },
+    { id: 'e_hra', label: 'House Rent Allowance', fieldKey: 'hra' },
+    { id: 'e_wa', label: 'Conveyance / WA', fieldKey: 'waterAllowance' },
+    { id: 'e_inc', label: 'Performance Bonus', fieldKey: 'incentive' },
+    { id: 'e_other', label: 'Special Allowance', fieldKey: 'otherAllowance' },
+  ],
+  deductionsList: [
+    { id: 'd_it', label: 'TDS (Income Tax)', fieldKey: 'incomeTax' },
+    { id: 'd_pf', label: 'EPF Deduction', fieldKey: 'providentFund' },
+    { id: 'd_esi', label: 'ESIC Deduction', fieldKey: 'esi' },
+    { id: 'd_prev', label: 'Arrear Recovery', fieldKey: 'previousMonth' },
+    { id: 'd_other', label: 'Miscellaneous', fieldKey: 'otherDeduction' },
+  ],
+  footerText: '-- Confidential Document - Generated by Pioneer Payslip System --',
+  showAmountInWords: true,
+  createdAt: '2026-11-14',
+};
+
+const TEMPLATES_STORAGE_KEY = 'pioneer_saved_templates_v3';
+
+export function getSavedTemplates(): PayslipTemplate[] {
+  try {
+    const raw = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+    if (!raw) {
+      const initial = [PIONEER_OFFICIAL_TEMPLATE, CORPORATE_MINIMAL_TEMPLATE];
+      localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(initial));
+      return initial;
+    }
+    const list: PayslipTemplate[] = JSON.parse(raw);
+    if (!list || list.length === 0) {
+      return [PIONEER_OFFICIAL_TEMPLATE];
+    }
+    return list;
+  } catch (err) {
+    console.warn('Failed to load templates from localStorage', err);
+    return [PIONEER_OFFICIAL_TEMPLATE];
+  }
+}
+
+export function saveTemplateToStorage(template: PayslipTemplate): PayslipTemplate[] {
+  const current = getSavedTemplates();
+  const index = current.findIndex((t) => t.id === template.id);
+
+  let updated: PayslipTemplate[];
+  if (index !== -1) {
+    if (template.isDefault) {
+      current.forEach((t) => (t.isDefault = false));
+    }
+    current[index] = template;
+    updated = [...current];
+  } else {
+    if (template.isDefault) {
+      current.forEach((t) => (t.isDefault = false));
+    }
+    updated = [...current, template];
+  }
+
+  try {
+    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.error('Failed to save templates to localStorage', err);
+  }
+  return updated;
+}
+
+export function deleteTemplateFromStorage(templateId: string): PayslipTemplate[] {
+  const current = getSavedTemplates();
+  if (current.length <= 1) {
+    alert('At least one template must remain in the application.');
+    return current;
+  }
+
+  const updated = current.filter((t) => t.id !== templateId);
+  if (!updated.some((t) => t.isDefault)) {
+    updated[0].isDefault = true;
+  }
+
+  try {
+    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.error('Failed to delete template from localStorage', err);
+  }
+  return updated;
+}
+
+export function setDefaultTemplateInStorage(templateId: string): PayslipTemplate[] {
+  const current = getSavedTemplates();
+  const updated = current.map((t) => ({
+    ...t,
+    isDefault: t.id === templateId,
+  }));
+
+  try {
+    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.error('Failed to set default template in localStorage', err);
+  }
+  return updated;
+}
