@@ -16,77 +16,127 @@ export type PayslipFieldKey =
   | 'designation'
   | 'department'
   | 'doj'
+  | 'dob'
+  | 'position'
+  | 'branch'
+  | 'mobile'
+  | 'paidDays'
+  | 'lopDays'
+  | 'payDate'
+  | 'payPeriod'
+  | 'taxRegime'
+  | 'ptState'
+  | 'location'
   | 'uanNumber'
   | 'esiNumber'
   | 'pfEsiApplicable'
-  | 'paidDays'
-  | 'lopDays'
+  | 'pfAccountNumber'
+  | 'panNumber'
+  | 'bankName'
+  | 'bankAccountNumber'
   | 'basic'
   | 'hra'
+  | 'washingAllowance'
   | 'waterAllowance'
   | 'incentive'
   | 'da'
   | 'otherAllowance'
+  | 'previousMonth'
   | 'grossEarnings'
-  | 'incomeTax'
   | 'providentFund'
   | 'esi'
-  | 'previousMonth'
+  | 'tds'
+  | 'incomeTax'
   | 'advance'
   | 'lateFine'
+  | 'professionalTax'
   | 'otherDeduction'
   | 'totalDeductions'
   | 'netPayable';
 
-export type MappingAction =
-  | { type: 'field'; targetField: PayslipFieldKey }
-  | { type: 'ignore' }
-  | { type: 'additional_earning'; label: string }
-  | { type: 'additional_deduction'; label: string };
-
 export interface ColumnMapping {
   sourceColumn: string;
-  action: MappingAction;
+  action:
+    | { type: 'field'; targetField: PayslipFieldKey }
+    | { type: 'additional_earning'; label: string }
+    | { type: 'additional_deduction'; label: string }
+    | { type: 'ignore' };
   confidence?: number;
   sampleValue?: any;
+}
+
+export interface EarningTier {
+  fixed: number;
+  earned: number;
+  arrears: number;
+  total: number;
+}
+
+export interface AdditionalEarning {
+  name: string;
+  fixed?: number;
+  earned: number;
+  arrears?: number;
+  total: number;
+  amount?: number;
+  confirmed?: boolean;
+}
+
+export interface AdditionalDeduction {
+  name: string;
+  amount: number;
+  confirmed?: boolean;
 }
 
 export interface EmployeeRecord {
   id: string;
   name: string;
-  designation: string;
-  department: string;
+  sex?: string;
   doj: string;
-  uanNumber: string;
-  esiNumber: string;
-  pfEsiApplicable: string;
+  dob: string;
+  department: string;
+  designation: string;
+  position: string;
+  branch: string;
+  mobile: string;
   paidDays: number;
   lopDays: number;
   payPeriod: string;
   payDate: string;
+  taxRegime: string;
+  ptState: string;
+  location: string;
 
-  // Earnings
-  basic: number;
-  hra: number;
-  waterAllowance: number;
-  incentive: number;
-  da: number;
-  otherAllowance: number;
-  additionalEarnings: { name: string; amount: number }[];
+  // Statutory & Bank Details
+  uanNumber: string;
+  esiNumber: string;
+  pfAccountNumber: string;
+  panNumber: string;
+  bankName: string;
+  bankAccountNumber: string;
+
+  // Form T Earnings Breakdown (Fixed, Earned, Arrears, Total)
+  basic: EarningTier;
+  hra: EarningTier;
+  washingAllowance: EarningTier;
+  incentive: EarningTier;
+  otherAllowance: EarningTier;
+  previousMonth: EarningTier;
+  additionalEarnings: AdditionalEarning[];
   grossEarnings: number;
 
-  // Deductions
-  incomeTax: number;
+  // Form T Deductions Breakdown
   providentFund: number;
   esi: number;
-  previousMonth: number;
-  advance: number;
-  lateFine: number;
+  tds: number;
+  professionalTax: number;
   otherDeduction: number;
+  advance?: number;
+  lateFine?: number;
   additionalDeductions: { name: string; amount: number }[];
   totalDeductions: number;
 
-  // Net
+  // Net Payable
   calculatedNetPayable: number;
   sourceNetPayable?: number;
   netMismatch: boolean;
@@ -98,50 +148,22 @@ export interface EmployeeRecord {
   rawRow: Record<string, any>;
 }
 
-export interface TemplateFieldConfig {
-  id: string;
-  label: string;
-  fieldKey: string;
-  customDefault?: string;
-}
-
-export interface TemplateItemConfig {
-  id: string;
-  label: string;
-  fieldKey: string;
-}
-
 export interface PayslipTemplate {
   id: string;
   name: string;
-  description?: string;
-  isDefault?: boolean;
-  
-  // Header & Brand
   companyName: string;
   companyAddress: string;
   cityPincode?: string;
   country?: string;
-  logoUrl?: string; // base64 image or 'default-pioneer'
-  
-  // Timing
+  logoUrl?: string; // base64 or '/pioneer_logo.png'
   payPeriod: string;
   payDate: string;
-  
-  // Theme Color
-  themeColor: 'emerald' | 'navy' | 'blue' | 'slate';
-  
-  // Configurable Sections
-  summaryFields: TemplateFieldConfig[];
-  statutoryFields: TemplateFieldConfig[];
-  earningsList: TemplateItemConfig[];
-  deductionsList: TemplateItemConfig[];
-  
-  // Notes & Footer
+  formTitle: string; // "FORM T - WAGES SLIP"
+  formSubtitle: string; // "(See Sub-Rule (6) of Rule 1 of the Tamil Nadu Shops and Establishments Rules, 1948)"
   footerText: string;
-  showAmountInWords: boolean;
-  showAttendanceSummary?: boolean;
-  createdAt?: string;
+  showSeal: boolean;
+  themeColor?: 'navy' | 'emerald' | 'blue';
+  isDefault?: boolean;
 }
 
 export interface BatchHistoryItem {
@@ -157,5 +179,16 @@ export interface BatchHistoryItem {
   generatedBlobs?: Map<string, Blob>;
 }
 
-export type AppTab = 'dashboard' | 'generate' | 'templates' | 'history';
-export type WizardStep = 'upload' | 'mapping' | 'review' | 'preview';
+export type AppRole = 'admin' | 'operator';
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  fullName: string;
+  role: AppRole;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export type AppTab = 'dashboard' | 'generate' | 'templates' | 'history' | 'team';
+export type WizardStep = 'upload' | 'review' | 'preview';

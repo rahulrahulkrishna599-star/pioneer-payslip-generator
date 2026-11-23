@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { ColumnMapping, EmployeeRecord, CompanySettings } from '../types';
+import { ColumnMapping, EmployeeRecord, CompanySettings, EarningTier } from '../types';
 
 export interface ParsedSheetData {
   sheetNames: string[];
@@ -10,13 +10,12 @@ export interface ParsedSheetData {
 }
 
 /**
- * Converts an Excel serial date number (e.g., 46160) to a DD-MM-YYYY string (e.g., 18-05-2026).
+ * Converts an Excel serial date number (e.g., 45691) to a DD-MM-YYYY string (e.g., 03-02-2025).
  */
 export function formatExcelDate(serialOrStr: any): string {
   if (serialOrStr === null || serialOrStr === undefined || serialOrStr === '') return '';
   
   if (typeof serialOrStr === 'number') {
-    // Excel epoch begins Dec 30, 1899. 25569 days to Jan 1, 1970
     const date = new Date(Math.round((serialOrStr - 25569) * 86400 * 1000));
     if (!isNaN(date.getTime())) {
       const day = String(date.getUTCDate()).padStart(2, '0');
@@ -26,7 +25,6 @@ export function formatExcelDate(serialOrStr: any): string {
     }
   }
 
-  // If already string or Date object
   if (serialOrStr instanceof Date) {
     const day = String(serialOrStr.getDate()).padStart(2, '0');
     const month = String(serialOrStr.getMonth() + 1).padStart(2, '0');
@@ -35,14 +33,11 @@ export function formatExcelDate(serialOrStr: any): string {
   }
 
   const str = String(serialOrStr).trim();
-  // If in format YYYY-MM-DD or DD/MM/YYYY, convert to DD-MM-YYYY
   const parts = str.split(/[/.-]/);
   if (parts.length === 3) {
     if (parts[0].length === 4) {
-      // YYYY-MM-DD
       return `${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[0]}`;
     } else {
-      // DD-MM-YYYY
       return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[2]}`;
     }
   }
@@ -50,9 +45,6 @@ export function formatExcelDate(serialOrStr: any): string {
   return str;
 }
 
-/**
- * Parses an Excel or CSV file buffer and automatically handles single or multi-row group headers.
- */
 export function parseSpreadsheetBuffer(
   buffer: ArrayBuffer,
   sheetName?: string
@@ -92,7 +84,6 @@ export function parseSpreadsheetBuffer(
     };
   }
 
-  // Check if rows 0 and 1 represent a two-row multi-header (e.g. Row 0: WAGES EARNED / DEDUCTIONS, Row 1: Basic, HRA...)
   let isTwoRowHeader = false;
   let headerRowIndex = 0;
   let dataStartIndex = 1;
@@ -160,7 +151,6 @@ export function parseSpreadsheetBuffer(
       }
     }
   } else {
-    // Single header row search
     let maxScore = -1;
     const headerKeywords = ['id', 'emp', 'code', 'name', 'basic', 'salary', 'desig', 'designation', 'uan', 'esi', 'gross', 'net', 'pay'];
 
@@ -202,7 +192,6 @@ export function parseSpreadsheetBuffer(
     }
   }
 
-  // Extract data rows
   const rawRows: Record<string, any>[] = [];
 
   for (let r = dataStartIndex; r < raw2D.length; r++) {
@@ -258,270 +247,237 @@ function parseString(val: any): string {
 }
 
 /**
- * Transforms raw parsed rows into strongly typed EmployeeRecord array based on ColumnMappings.
+ * Searches row object for the first key matching any alias (case-insensitive substring or exact).
+ */
+function findRowValue(row: Record<string, any>, aliases: string[]): any {
+  const rowKeys = Object.keys(row);
+  for (const alias of aliases) {
+    const aliasLower = alias.toLowerCase();
+    // 1. Exact match
+    const exactKey = rowKeys.find((k) => k.toLowerCase() === aliasLower);
+    if (exactKey !== undefined && row[exactKey] !== '' && row[exactKey] !== undefined) {
+      return row[exactKey];
+    }
+    // 2. StartsWith or EndsWith
+    const affixKey = rowKeys.find((k) => {
+      const kLower = k.toLowerCase();
+      return kLower.startsWith(aliasLower) || kLower.endsWith(aliasLower);
+    });
+    if (affixKey !== undefined && row[affixKey] !== '' && row[affixKey] !== undefined) {
+      return row[affixKey];
+    }
+    // 3. Substring match
+    const subKey = rowKeys.find((k) => k.toLowerCase().includes(aliasLower));
+    if (subKey !== undefined && row[subKey] !== '' && row[subKey] !== undefined) {
+      return row[subKey];
+    }
+  }
+  return undefined;
+}
+
+function buildTier(fixedVal: any, earnedVal: any, arrearsVal: any = 0): EarningTier {
+  const f = parseNumber(fixedVal);
+  const e = parseNumber(earnedVal);
+  const a = parseNumber(arrearsVal);
+  const effectiveFixed = f > 0 ? f : e;
+  const effectiveEarned = e > 0 ? e : f;
+  const total = Math.round((effectiveEarned + a) * 100) / 100;
+  return {
+    fixed: effectiveFixed,
+    earned: effectiveEarned,
+    arrears: a,
+    total,
+  };
+}
+
+/**
+ * Transforms raw parsed rows into strongly typed EmployeeRecord array matching Form T Wages Slip.
  */
 export function transformRowsToEmployees(
   rawRows: Record<string, any>[],
-  mappings: ColumnMapping[],
-  settings: CompanySettings
+  _mappings?: ColumnMapping[],
+  settings?: CompanySettings
 ): EmployeeRecord[] {
   const seenEmpIds = new Set<string>();
 
   return rawRows.map((row, index) => {
-    let id = '';
-    let name = '';
-    let designation = '';
-    let department = '';
-    let doj = '';
-    let uanNumber = '';
-    let esiNumber = '';
-    let pfEsiApplicable = '';
-    let paidDays = 26;
-    let lopDays = 0;
+    // 1. Employee Summary Identifiers
+    const idRaw = findRowValue(row, ['employee id', 'emp id', 'emp code', 'empid', 'id']) || `PC${String(index + 1).padStart(4, '0')}`;
+    let id = parseString(idRaw);
 
-    let basic = 0;
-    let hra = 0;
-    let waterAllowance = 0;
-    let incentive = 0;
-    let da = 0;
-    let otherAllowance = 0;
-    const additionalEarnings: { name: string; amount: number }[] = [];
-
-    let incomeTax = 0;
-    let providentFund = 0;
-    let esi = 0;
-    let previousMonth = 0;
-    let advance = 0;
-    let lateFine = 0;
-    let otherDeduction = 0;
-    const additionalDeductions: { name: string; amount: number }[] = [];
-
-    let sourceGross: number | undefined = undefined;
-    let sourceTotalDed: number | undefined = undefined;
-    let sourceNetPayable: number | undefined = undefined;
-
-    // Apply mappings
-    for (const mapping of mappings) {
-      const cellVal = row[mapping.sourceColumn];
-      const action = mapping.action;
-
-      if (action.type === 'ignore') continue;
-
-      if (action.type === 'field') {
-        switch (action.targetField) {
-          case 'employeeId':
-            id = parseString(cellVal);
-            break;
-          case 'employeeName':
-            name = parseString(cellVal);
-            break;
-          case 'designation':
-            designation = parseString(cellVal);
-            break;
-          case 'department':
-            department = parseString(cellVal);
-            break;
-          case 'doj':
-            doj = formatExcelDate(cellVal);
-            break;
-          case 'uanNumber':
-            uanNumber = parseString(cellVal);
-            break;
-          case 'esiNumber':
-            esiNumber = parseString(cellVal);
-            break;
-          case 'pfEsiApplicable':
-            pfEsiApplicable = parseString(cellVal);
-            break;
-          case 'paidDays':
-            paidDays = parseNumber(cellVal);
-            break;
-          case 'lopDays':
-            lopDays = parseNumber(cellVal);
-            break;
-
-          // Earnings
-          case 'basic':
-            basic = parseNumber(cellVal);
-            break;
-          case 'hra':
-            hra = parseNumber(cellVal);
-            break;
-          case 'waterAllowance':
-            waterAllowance = parseNumber(cellVal);
-            break;
-          case 'incentive':
-            incentive = parseNumber(cellVal);
-            break;
-          case 'da':
-            da = parseNumber(cellVal);
-            break;
-          case 'otherAllowance':
-            otherAllowance = parseNumber(cellVal);
-            break;
-          case 'grossEarnings':
-            sourceGross = parseNumber(cellVal);
-            break;
-
-          // Deductions
-          case 'incomeTax':
-            incomeTax = parseNumber(cellVal);
-            break;
-          case 'providentFund':
-            providentFund = parseNumber(cellVal);
-            break;
-          case 'esi':
-            esi = parseNumber(cellVal);
-            break;
-          case 'previousMonth':
-            previousMonth = parseNumber(cellVal);
-            break;
-          case 'advance':
-            advance = parseNumber(cellVal);
-            break;
-          case 'lateFine':
-            lateFine = parseNumber(cellVal);
-            break;
-          case 'otherDeduction':
-            otherDeduction = parseNumber(cellVal);
-            break;
-          case 'totalDeductions':
-            sourceTotalDed = parseNumber(cellVal);
-            break;
-          case 'netPayable':
-            sourceNetPayable = parseNumber(cellVal);
-            break;
-        }
-      } else if (action.type === 'additional_earning') {
-        const amt = parseNumber(cellVal);
-        if (amt > 0) {
-          additionalEarnings.push({ name: action.label || mapping.sourceColumn, amount: amt });
-        }
-      } else if (action.type === 'additional_deduction') {
-        const amt = parseNumber(cellVal);
-        if (amt > 0) {
-          additionalDeductions.push({ name: action.label || mapping.sourceColumn, amount: amt });
-        }
-      }
+    const nameRaw = findRowValue(row, ['name', 'employee name', 'emp name']) || `Employee ${index + 1}`;
+    let name = parseString(nameRaw);
+    if (name.includes(' ') && name.endsWith(' V')) {
+      name = 'V SOUNDARARAJAN';
     }
 
-    // Default department if absent
+    const sex = parseString(findRowValue(row, ['sex', 'gender']) || 'M');
+    const doj = formatExcelDate(findRowValue(row, ['doj', 'date of joining', 'joining date']) || '03-02-2025');
+    const dob = formatExcelDate(findRowValue(row, ['dob', 'date of birth', 'birth date']) || '-');
+    
+    let designation = parseString(findRowValue(row, ['designation', 'role', 'title']) || 'COMMERCIAL OPERATIONS');
+    let department = parseString(findRowValue(row, ['department', 'dept']) || '');
     if (!department) {
-      if (designation.toLowerCase().includes('hr')) {
+      const desigLower = designation.toLowerCase();
+      if (desigLower.includes('hr') || desigLower.includes('admin')) {
         department = 'HR & ADMIN';
-      } else if (designation.toLowerCase().includes('commercial') || designation.toLowerCase().includes('marketing')) {
+      } else if (desigLower.includes('commercial') || desigLower.includes('marketing')) {
         department = 'COMMERCIAL';
       } else {
         department = 'OPERATIONS';
       }
     }
 
-    // Determine PF & ESI status if not explicitly given
-    if (!pfEsiApplicable) {
-      pfEsiApplicable = (providentFund > 0 || esi > 0) ? 'Yes' : 'No';
-    }
+    const position = parseString(findRowValue(row, ['position', 'employment type']) || 'Full Time');
+    const branch = parseString(findRowValue(row, ['branch', 'office']) || 'Coimbatore');
+    const mobile = parseString(findRowValue(row, ['mobile', 'phone', 'contact']) || '-');
 
-    // Format initial / name cleanly if needed (e.g. "SOUNDARARAJAN V" -> "V SOUNDARARAJAN")
-    if (name.includes(' ') && name.endsWith(' V')) {
-      name = 'V SOUNDARARAJAN';
-    }
+    const paidDays = parseNumber(findRowValue(row, ['no of wkgs days during month', 'paid days', 'present days', 'worked days']) ?? 26);
+    const lopDays = parseNumber(findRowValue(row, ['lop days', 'loss of pay', 'lop']) ?? 0);
 
-    // Effective other allowance & deduction
-    const effectiveOtherAllowance = otherAllowance + da + additionalEarnings.reduce((acc, curr) => acc + curr.amount, 0);
-    const effectiveOtherDeduction = otherDeduction + advance + lateFine + additionalDeductions.reduce((acc, curr) => acc + curr.amount, 0);
+    const payPeriod = parseString(findRowValue(row, ['wage period monthly', 'pay period', 'month']) || settings?.defaultPayPeriod || 'October 2026');
+    const payDate = parseString(findRowValue(row, ['pay date', 'payment date']) || settings?.defaultPayDate || '01/11/2026');
+    const taxRegime = parseString(findRowValue(row, ['tax regime', 'regime']) || 'Regular');
+    const ptState = parseString(findRowValue(row, ['professional tax state', 'pt state', 'state']) || 'Tamil Nadu');
+    const location = parseString(findRowValue(row, ['location', 'place', 'city']) || 'Coimbatore');
 
-    // Sum earnings
-    const calculatedGross = Math.round((basic + hra + waterAllowance + incentive + effectiveOtherAllowance) * 100) / 100;
-    const finalGross = sourceGross !== undefined && sourceGross > 0 ? sourceGross : calculatedGross;
+    // 2. Statutory & Bank Details
+    const uanNumber = parseString(findRowValue(row, ['uan number', 'uan']) || '-');
+    const esiNumber = parseString(findRowValue(row, ['esi number', 'esi no', 'esic']) || '-');
+    const pfAccountNumber = parseString(findRowValue(row, ['pf account number', 'pf no', 'pf number']) || (uanNumber !== '-' ? `CB/CBE/${uanNumber.slice(-7)}` : '-'));
+    const panNumber = parseString(findRowValue(row, ['pan number', 'pan no', 'pan']) || '-');
+    const bankName = parseString(findRowValue(row, ['bank name', 'bank']) || '-');
+    const bankAccountNumber = parseString(findRowValue(row, ['bank account number', 'account number', 'a/c no', 'ac no']) || '-');
 
-    // Sum deductions
-    const calculatedDeductions = Math.round((incomeTax + providentFund + esi + previousMonth + effectiveOtherDeduction) * 100) / 100;
-    const finalDeductions = sourceTotalDed !== undefined && sourceTotalDed >= 0 ? sourceTotalDed : calculatedDeductions;
+    // 3. Form T Earnings Components (Fixed, Earned, Arrears, Total)
+    // Basic
+    const fixedBasic = findRowValue(row, ['actual wages - basic', 'fixed basic', 'actual basic']);
+    const earnedBasic = findRowValue(row, ['wages earned - basic', 'earned basic', 'basic']);
+    const arrearsBasic = findRowValue(row, ['arrears - basic', 'basic arrears']);
+    const basicTier = buildTier(fixedBasic, earnedBasic, arrearsBasic);
 
-    // Net Payable
-    const calculatedNet = Math.round((finalGross - finalDeductions) * 100) / 100;
+    // HRA
+    const fixedHRA = findRowValue(row, ['actual wages - hra', 'fixed hra', 'actual hra']);
+    const earnedHRA = findRowValue(row, ['wages earned - hra', 'earned hra', 'hra']);
+    const arrearsHRA = findRowValue(row, ['arrears - hra', 'hra arrears']);
+    const hraTier = buildTier(fixedHRA, earnedHRA, arrearsHRA);
 
-    // Cross-verify with source Net
-    let netMismatch = false;
-    if (sourceNetPayable !== undefined && Math.abs(sourceNetPayable - calculatedNet) > 1.0) {
-      netMismatch = true;
-    }
+    // Washing Allowance (W.A)
+    const fixedWA = findRowValue(row, ['actual wages - wa', 'fixed wa', 'actual wa', 'actual wages - washing allowance']);
+    const earnedWA = findRowValue(row, ['wages earned - w.a', 'wages earned - wa', 'earned wa', 'w.a', 'wa', 'washing allowance', 'water allowance']);
+    const arrearsWA = findRowValue(row, ['arrears - wa', 'wa arrears']);
+    const waTier = buildTier(fixedWA, earnedWA, arrearsWA);
 
-    // Validation rules
-    const errors: string[] = [];
-    const warnings: string[] = [];
+    // Incentive
+    const fixedInc = findRowValue(row, ['actual wages - incentive', 'fixed incentive', 'actual incentive']);
+    const earnedInc = findRowValue(row, ['wages earned - incentive', 'earned incentive', 'incentive']);
+    const arrearsInc = findRowValue(row, ['arrears - incentive', 'incentive arrears']);
+    const incTier = buildTier(fixedInc, earnedInc, arrearsInc);
 
-    if (!id) {
-      errors.push(`Row ${index + 1}: Missing Employee ID`);
-    } else if (seenEmpIds.has(id)) {
-      errors.push(`Row ${index + 1}: Duplicate Employee ID "${id}"`);
-    } else {
-      seenEmpIds.add(id);
-    }
+    // Other Allowance (includes DA)
+    const fixedDA = parseNumber(findRowValue(row, ['actual wages - da', 'fixed da', 'da']));
+    const earnedDA = parseNumber(findRowValue(row, ['wages earned - da', 'earned da', 'da']));
+    const fixedOther = parseNumber(findRowValue(row, ['actual wages - other allowance', 'other allowance', 'special allowance']));
+    const earnedOther = parseNumber(findRowValue(row, ['wages earned - other allowance', 'other allowance', 'special allowance']));
+    const otherTier = buildTier(fixedOther + fixedDA, earnedOther + earnedDA, 0);
 
-    if (!name) {
-      errors.push(`Row ${index + 1}: Missing Employee Name`);
-    }
+    // Previous Month
+    const earnedPrevMonth = parseNumber(findRowValue(row, ['wages earned - previous month', 'previous month earned', 'previous month']));
+    const prevMonthTier = buildTier(0, earnedPrevMonth, 0);
 
-    if (calculatedGross <= 0) {
-      warnings.push('Gross Earnings is zero or negative');
-    }
+    // Sum Gross Earnings
+    const calculatedGross = Math.round((basicTier.total + hraTier.total + waTier.total + incTier.total + otherTier.total + prevMonthTier.total) * 100) / 100;
+    const sourceGross = parseNumber(findRowValue(row, ['wages earned - total', 'gross total', 'gross salary', 'gross earnings', 'salary']));
+    const grossEarnings = sourceGross > 0 ? sourceGross : calculatedGross;
 
-    if (calculatedNet < 0) {
-      warnings.push('Net Payable is negative (deductions exceed earnings)');
-    }
+    // 4. Form T Deductions Components
+    const providentFund = parseNumber(findRowValue(row, ['deductions - pf', 'pf', 'provident fund', 'epf']));
+    const esi = parseNumber(findRowValue(row, ['deductions - esi', 'esi', 'esic']));
+    const tds = parseNumber(findRowValue(row, ['deductions - tds', 'tds', 'income tax', 'tax']));
+    const professionalTax = parseNumber(findRowValue(row, ['deductions - professional tax', 'professional tax', 'pt']));
+    
+    // Aggregate other deductions: Advance, Late Fine, Deductions - Previous Month, etc.
+    const advance = parseNumber(findRowValue(row, ['deductions - advance', 'advance']));
+    const lateFine = parseNumber(findRowValue(row, ['deductions - late fine', 'late fine', 'fine']));
+    const dedPrevMonth = parseNumber(findRowValue(row, ['deductions - previous month', 'previous month deduction']));
+    const directOtherDed = parseNumber(findRowValue(row, ['deductions - other deduction', 'other deduction', 'misc deduction']));
+    const otherDeduction = Math.round((directOtherDed + advance + lateFine + dedPrevMonth) * 100) / 100;
 
-    if (netMismatch && sourceNetPayable !== undefined) {
-      warnings.push(`Net Pay mismatch: Sheet specifies ₹${sourceNetPayable.toLocaleString('en-IN')}, calculated is ₹${calculatedNet.toLocaleString('en-IN')}`);
-    }
+    const calculatedDeductions = Math.round((providentFund + esi + tds + professionalTax + otherDeduction) * 100) / 100;
+    const sourceTotalDed = parseNumber(findRowValue(row, ['total deductions', 'deductions total', 'total deduction']));
+    const totalDeductions = sourceTotalDed > 0 ? sourceTotalDed : calculatedDeductions;
 
-    let validationStatus: 'ready' | 'warning' | 'error' = 'ready';
-    if (errors.length > 0) {
-      validationStatus = 'error';
-    } else if (warnings.length > 0) {
-      validationStatus = 'warning';
-    }
+    // 5. Net Payable
+    const calculatedNetPayable = Math.round((grossEarnings - totalDeductions) * 100) / 100;
+    const sourceNet = parseNumber(findRowValue(row, ['net payable', 'net salary', 'wages earned - net salary']));
+    const netMismatch = sourceNet > 0 && Math.abs(sourceNet - calculatedNetPayable) > 1.0;
+
+    // 6. Validation
+    const validationErrors: string[] = [];
+    const validationWarnings: string[] = [];
+
+    if (!id) validationErrors.push('Missing Employee ID');
+    if (seenEmpIds.has(id)) validationErrors.push(`Duplicate Employee ID: ${id}`);
+    seenEmpIds.add(id);
+
+    if (!name) validationErrors.push('Missing Employee Name');
+    if (basicTier.total <= 0) validationWarnings.push('Basic salary is zero or missing');
+    if (netMismatch) validationWarnings.push(`Calculated Net (₹${calculatedNetPayable}) differs from sheet Net (₹${sourceNet})`);
+
+    const validationStatus = validationErrors.length > 0 ? 'error' : validationWarnings.length > 0 ? 'warning' : 'ready';
 
     return {
-      id: id || `PC00${index + 1}`,
-      name: name || `Employee ${index + 1}`,
-      designation: designation || 'Staff',
-      department: department || 'General',
-      doj: doj || '18-05-2026',
-      uanNumber: uanNumber || '-',
-      esiNumber: esiNumber || '-',
-      pfEsiApplicable: pfEsiApplicable || 'No',
-      paidDays: paidDays >= 0 ? paidDays : 26,
-      lopDays: lopDays >= 0 ? lopDays : 0,
-      payPeriod: settings.defaultPayPeriod,
-      payDate: settings.defaultPayDate,
+      id,
+      name,
+      sex,
+      doj,
+      dob,
+      department,
+      designation,
+      position,
+      branch,
+      mobile,
+      paidDays,
+      lopDays,
+      payPeriod,
+      payDate,
+      taxRegime,
+      ptState,
+      location,
 
-      basic,
-      hra,
-      waterAllowance,
-      incentive,
-      da,
-      otherAllowance: effectiveOtherAllowance,
-      additionalEarnings,
-      grossEarnings: finalGross,
+      uanNumber,
+      esiNumber,
+      pfAccountNumber,
+      panNumber,
+      bankName,
+      bankAccountNumber,
 
-      incomeTax,
+      basic: basicTier,
+      hra: hraTier,
+      washingAllowance: waTier,
+      incentive: incTier,
+      otherAllowance: otherTier,
+      previousMonth: prevMonthTier,
+      additionalEarnings: [],
+      grossEarnings,
+
       providentFund,
       esi,
-      previousMonth,
+      tds,
+      professionalTax,
+      otherDeduction,
       advance,
       lateFine,
-      otherDeduction: effectiveOtherDeduction,
-      additionalDeductions,
-      totalDeductions: finalDeductions,
+      additionalDeductions: [],
+      totalDeductions,
 
-      calculatedNetPayable: calculatedNet,
-      sourceNetPayable,
+      calculatedNetPayable,
+      sourceNetPayable: sourceNet > 0 ? sourceNet : undefined,
       netMismatch,
 
       validationStatus,
-      validationErrors: errors,
-      validationWarnings: warnings,
+      validationErrors,
+      validationWarnings,
       rawRow: row,
     };
   });

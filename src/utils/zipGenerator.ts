@@ -59,7 +59,7 @@ export async function generateBulkPayslipsAndZip(
     await new Promise((resolve) => setTimeout(resolve, 8));
 
     try {
-      const doc = generatePayslipPdf(emp, settings, template);
+      const doc = await generatePayslipPdf(emp, settings, template);
       const pdfBlob = doc.output('blob');
       const arrayBuffer = await pdfBlob.arrayBuffer();
 

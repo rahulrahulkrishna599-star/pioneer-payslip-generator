@@ -9,15 +9,17 @@ import {
   Building2,
   FileSpreadsheet
 } from 'lucide-react';
-import { BatchHistoryItem, CompanySettings, EmployeeRecord } from '../types';
+import { BatchHistoryItem, CompanySettings, EmployeeRecord, PayslipTemplate } from '../types';
 import { downloadZipFile } from '../utils/zipGenerator';
 import { downloadIndividualPayslipPdf } from '../utils/pdfGenerator';
 import { formatIndianCurrency } from '../utils/numberToWords';
 import { PayslipPreview } from './PayslipPreview';
+import { downloadStoredZip, saveIndividualEmployeeToSupabase } from '../services/batchService';
 
 interface GeneratedPayslipsPageProps {
   batches: BatchHistoryItem[];
   settings: CompanySettings;
+  template?: PayslipTemplate;
   onClearBatches: () => void;
   onNewBatch: () => void;
 }
@@ -25,6 +27,7 @@ interface GeneratedPayslipsPageProps {
 export const GeneratedPayslipsPage: React.FC<GeneratedPayslipsPageProps> = ({
   batches,
   settings,
+  template,
   onClearBatches,
   onNewBatch,
 }) => {
@@ -83,11 +86,11 @@ export const GeneratedPayslipsPage: React.FC<GeneratedPayslipsPageProps> = ({
           </div>
         </div>
 
-        {/* Temporary Storage Notice */}
-        <div className="mt-4 p-3 bg-blue-50/60 border border-blue-200 rounded text-xs text-blue-900 flex items-start gap-2">
-          <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+        {/* Storage Persistence Notice */}
+        <div className="mt-4 p-3 bg-emerald-50/70 border border-emerald-200 rounded text-xs text-emerald-950 flex items-start gap-2">
+          <Info className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
           <div className="text-[11px] leading-relaxed">
-            <strong>Session Retention:</strong> Generated PDF files and ZIP archives are retained in client-side memory for the duration of this browser session. Refreshing or closing this tab will clear temporary memory. Please download your ZIP archive before closing.
+            <strong>Supabase Cloud Persistence Active:</strong> All generated payroll batches, financial aggregates, and individual employee records are securely synced to your cloud database. Any of your 5 HR team members can review and re-download archives anytime from any device.
           </div>
         </div>
       </div>
@@ -198,13 +201,15 @@ export const GeneratedPayslipsPage: React.FC<GeneratedPayslipsPageProps> = ({
                     </button>
 
                     {/* Download ZIP */}
-                    {batch.generatedBlobs && (
+                    {(batch.generatedBlobs || (batch as any).zipStoragePath) && (
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={async () => {
                           const zipBlob = (batch as any)._zipBlob;
                           if (zipBlob) {
                             downloadZipFile(zipBlob, batch.payPeriod);
+                          } else if ((batch as any).zipStoragePath) {
+                            await downloadStoredZip((batch as any).zipStoragePath, `${batch.payPeriod.replace(/\s+/g, '_')}_Payslips.zip`);
                           }
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded border border-emerald-300 transition-colors"
@@ -265,7 +270,10 @@ export const GeneratedPayslipsPage: React.FC<GeneratedPayslipsPageProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => downloadIndividualPayslipPdf(emp, settings)}
+                        onClick={async () => {
+                          await downloadIndividualPayslipPdf(emp, settings, template);
+                          await saveIndividualEmployeeToSupabase(emp, template, settings);
+                        }}
                         className="p-1 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded"
                         title="Download PDF"
                       >
@@ -292,7 +300,10 @@ export const GeneratedPayslipsPage: React.FC<GeneratedPayslipsPageProps> = ({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => downloadIndividualPayslipPdf(inspectEmployee, settings)}
+                      onClick={async () => {
+                        await downloadIndividualPayslipPdf(inspectEmployee, settings, template);
+                        await saveIndividualEmployeeToSupabase(inspectEmployee, template, settings);
+                      }}
                       className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition-colors"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -309,7 +320,7 @@ export const GeneratedPayslipsPage: React.FC<GeneratedPayslipsPageProps> = ({
                 </div>
 
                 <div className="p-6 overflow-y-auto">
-                  <PayslipPreview employee={inspectEmployee} settings={settings} />
+                  <PayslipPreview employee={inspectEmployee} settings={settings} template={template} />
                 </div>
               </div>
             </div>

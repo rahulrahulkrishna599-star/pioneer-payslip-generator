@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   AppTab, 
   WizardStep, 
@@ -8,16 +8,19 @@ import {
   BatchHistoryItem,
   PayslipTemplate
 } from './types';
-import { PIONEER_DEFAULT_SETTINGS, generateSample50Employees } from './utils/sampleDataGenerator';
+import { PIONEER_DEFAULT_SETTINGS } from './utils/sampleDataGenerator';
 import { ParsedSheetData, parseSpreadsheetBuffer, transformRowsToEmployees } from './utils/excelParser';
 import { autoDetectColumnMappings } from './utils/columnDetector';
 import { generateBulkPayslipsAndZip, BulkGenerationProgress, BulkGenerationResult } from './utils/zipGenerator';
 import { 
   getSavedTemplates, 
   saveTemplateToStorage, 
-  deleteTemplateFromStorage, 
-  PIONEER_OFFICIAL_TEMPLATE 
+  PIONEER_FORM_T_TEMPLATE 
 } from './utils/templateStorage';
+import { fetchCompanySettingsFromSupabase, saveCompanySettingsToSupabase } from './services/templateService';
+import { loadActiveDraft, saveActiveDraft, clearActiveDraft, PayrollDraft } from './services/draftService';
+import { fetchBatchesFromSupabase, saveBatchToSupabase, clearAllBatchesFromSupabase } from './services/batchService';
+import { useAuth } from './contexts/AuthContext';
 
 // Components
 import { Sidebar } from './components/Sidebar';
@@ -28,23 +31,29 @@ import { PreviewStep } from './components/PreviewStep';
 import { TemplateEditorView } from './components/TemplateEditorView';
 import { GenerationModal } from './components/GenerationModal';
 import { GeneratedPayslipsPage } from './components/GeneratedPayslipsPage';
+import { LoginPortal } from './components/auth/LoginPortal';
+import { UserAvatarPill } from './components/auth/UserAvatarPill';
+import { UserManagementView } from './components/UserManagementView';
 
 export function App() {
+  const { isAuthenticated, isLoading, isAdmin, user } = useAuth();
   const [currentTab, setCurrentTab] = useState<AppTab>('generate');
   const [wizardStep, setWizardStep] = useState<WizardStep>('upload');
 
-  // Templates State
-  const [templates, setTemplates] = useState<PayslipTemplate[]>(() => getSavedTemplates());
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(() => {
+  // Single Authoritative Form T Template State
+  const [template, setTemplate] = useState<PayslipTemplate>(() => {
     const list = getSavedTemplates();
-    const def = list.find((t) => t.isDefault) || list[0];
-    return def ? def.id : PIONEER_OFFICIAL_TEMPLATE.id;
+    return list[0] || PIONEER_FORM_T_TEMPLATE;
   });
 
-  // Base Settings (derived from active template or default)
-  const activeTemplate = templates.find((t) => t.id === selectedTemplateId) || templates[0] || PIONEER_OFFICIAL_TEMPLATE;
-
-  const [settings, setSettings] = useState<CompanySettings>(() => PIONEER_DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<CompanySettings>(() => ({
+    ...PIONEER_DEFAULT_SETTINGS,
+    companyName: template.companyName,
+    companyAddress: template.companyAddress,
+    defaultPayPeriod: template.payPeriod,
+    defaultPayDate: template.payDate,
+    logoUrl: template.logoUrl,
+  }));
 
   // Data & Workflow State
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -63,40 +72,97 @@ export function App() {
   const [generationResult, setGenerationResult] = useState<BulkGenerationResult | null>(null);
   const [targetGenerationEmployees, setTargetGenerationEmployees] = useState<EmployeeRecord[]>([]);
 
-  // Template Management Handlers
-  const handleSaveTemplate = (template: PayslipTemplate) => {
-    const updated = saveTemplateToStorage(template);
-    setTemplates(updated);
-    if (template.id === selectedTemplateId) {
-      setSettings((prev) => ({
-        ...prev,
-        companyName: template.companyName,
-        companyAddress: template.companyAddress,
-        defaultPayPeriod: template.payPeriod,
-        defaultPayDate: template.payDate,
-        footerText: template.footerText,
-      }));
+  // Draft & Cloud Session State
+  const [pendingDraft, setPendingDraft] = useState<PayrollDraft | null>(null);
+
+  // 1. Initial Load: Sync from Supabase on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function initSupabaseData() {
+      try {
+        // Fetch official settings
+        const tpl = await fetchCompanySettingsFromSupabase();
+        if (isMounted) {
+          setTemplate(tpl);
+          setSettings((prev) => ({
+            ...prev,
+            companyName: tpl.companyName,
+            companyAddress: tpl.companyAddress,
+            defaultPayPeriod: tpl.payPeriod,
+            defaultPayDate: tpl.payDate,
+            logoUrl: tpl.logoUrl,
+          }));
+        }
+
+        // Fetch historical generated batches
+        const cloudBatches = await fetchBatchesFromSupabase();
+        if (isMounted && cloudBatches.length > 0) {
+          setBatches(cloudBatches);
+        }
+
+        // Check for in-progress draft from previous session / refresh
+        const draft = await loadActiveDraft();
+        if (isMounted && draft && Array.isArray(draft.employees) && draft.employees.length > 0) {
+          setPendingDraft(draft);
+        }
+      } catch (err) {
+        console.warn('Initial Supabase sync error:', err);
+      }
     }
+
+    initSupabaseData();
+    return () => { isMounted = false; };
+  }, []);
+
+  // 2. Draft Auto-Save: Persist active employee adjustments seamlessly
+  useEffect(() => {
+    if (employees.length > 0 && !pendingDraft) {
+      saveActiveDraft({
+        fileName: uploadedFile?.name || 'Pioneer_Payroll_Batch.xlsx',
+        payPeriod: template.payPeriod || employees[0]?.payPeriod || settings.defaultPayPeriod,
+        parsedSheetData,
+        employees,
+        selectedIds: Array.from(selectedIds),
+        columnMappings,
+        currentStep: wizardStep,
+      });
+    }
+  }, [employees, selectedIds, columnMappings, parsedSheetData, wizardStep, uploadedFile, template.payPeriod, settings.defaultPayPeriod, pendingDraft]);
+
+  // Draft Actions
+  const handleResumeDraft = (draft: PayrollDraft) => {
+    setEmployees(draft.employees);
+    setSelectedIds(new Set(draft.selectedIds));
+    setColumnMappings(draft.columnMappings);
+    setParsedSheetData(draft.parsedSheetData);
+    setWizardStep(draft.currentStep || 'review');
+    setCurrentTab('generate');
+    setPendingDraft(null);
   };
 
-  const handleDeleteTemplate = (templateId: string) => {
-    const updated = deleteTemplateFromStorage(templateId);
-    setTemplates(updated);
-    if (selectedTemplateId === templateId) {
-      setSelectedTemplateId(updated[0].id);
-    }
+  const handleDiscardDraft = async () => {
+    await clearActiveDraft();
+    setPendingDraft(null);
+    handleClearUpload();
   };
 
-  const handleDuplicateTemplate = (template: PayslipTemplate) => {
-    const copy: PayslipTemplate = {
-      ...template,
-      id: `template_${Date.now()}`,
-      name: `${template.name} (Copy)`,
-      isDefault: false,
-    };
-    const updated = saveTemplateToStorage(copy);
-    setTemplates(updated);
-    setSelectedTemplateId(copy.id);
+  // Template & Logo Management Handlers
+  const handleSaveTemplate = async (updated: PayslipTemplate) => {
+    setTemplate(updated);
+    setSettings((prev) => ({
+      ...prev,
+      companyName: updated.companyName,
+      companyAddress: updated.companyAddress,
+      defaultPayPeriod: updated.payPeriod,
+      defaultPayDate: updated.payDate,
+      logoUrl: updated.logoUrl,
+    }));
+    await saveCompanySettingsToSupabase(updated);
+  };
+
+  const handleUpdateLogo = (newLogoUrl: string) => {
+    const updated = { ...template, logoUrl: newLogoUrl };
+    handleSaveTemplate(updated);
   };
 
   // 1. Data Parsed from Upload
@@ -112,8 +178,8 @@ export function App() {
     // Automatically transform rows
     const transformed = transformRowsToEmployees(data.rawRows, mappings, {
       ...settings,
-      defaultPayPeriod: activeTemplate.payPeriod,
-      defaultPayDate: activeTemplate.payDate,
+      defaultPayPeriod: template.payPeriod,
+      defaultPayDate: template.payDate,
     });
     setEmployees(transformed);
 
@@ -137,41 +203,9 @@ export function App() {
     }
   };
 
-  // Load 50 Sample Employees directly
-  const handleLoadSample = (sampleEmployees?: EmployeeRecord[]) => {
-    const list = sampleEmployees || generateSample50Employees({
-      ...settings,
-      defaultPayPeriod: activeTemplate.payPeriod,
-      defaultPayDate: activeTemplate.payDate,
-    });
-    setEmployees(list);
-    setUploadedFile(null);
-    setParsedSheetData({
-      sheetNames: ['October 2026 Payroll'],
-      activeSheet: 'October 2026 Payroll',
-      headers: [
-        'Employee ID', 'Name', 'Designation', 'Department', 'DOJ', 'UAN Number', 'ESI Number',
-        'Paid Days', 'LOP Days', 'Basic', 'HRA', 'WA', 'INCENTIVE', 'Other Allowance', 'Gross Total',
-        'TDS', 'PF', 'ESI', 'Previous Month', 'Other Deduction', 'Total Deductions', 'Net Salary'
-      ],
-      rawRows: [],
-      totalRawRows: list.length,
-    });
-
-    const sampleMappings = autoDetectColumnMappings([
-      'Employee ID', 'Name', 'Designation', 'Department', 'DOJ', 'UAN Number', 'ESI Number',
-      'Paid Days', 'LOP Days', 'Basic', 'HRA', 'WA', 'INCENTIVE', 'Other Allowance', 'Gross Total',
-      'TDS', 'PF', 'ESI', 'Previous Month', 'Other Deduction', 'Total Deductions', 'Net Salary'
-    ]);
-    setColumnMappings(sampleMappings);
-
-    setSelectedIds(new Set(list.map((e) => e.id)));
-    setCurrentTab('generate');
-    setWizardStep('review');
-  };
-
   // Clear current upload
-  const handleClearUpload = () => {
+  const handleClearUpload = async () => {
+    await clearActiveDraft();
     setUploadedFile(null);
     setParsedSheetData(null);
     setColumnMappings([]);
@@ -205,9 +239,9 @@ export function App() {
     setWizardStep('preview');
   };
 
-  // Start Bulk Generation using chosen template
+  // Start Bulk Generation using Form T template
   const handleStartBulkGeneration = async (targetEmployees: EmployeeRecord[], templateToUse?: PayslipTemplate) => {
-    const tpl = templateToUse || activeTemplate;
+    const tpl = templateToUse || template;
     setTargetGenerationEmployees(targetEmployees);
     setIsGenerating(true);
     setGenerationProgress({
@@ -247,6 +281,11 @@ export function App() {
       (newBatch as any)._zipBlob = res.zipBlob;
 
       setBatches((prev) => [newBatch, ...prev]);
+
+      // Persist completed batch to Supabase and upload ZIP archive to cloud storage
+      await saveBatchToSupabase(newBatch, res.zipBlob);
+      // Clean up in-progress draft since batch is finalized
+      await clearActiveDraft();
     } catch (err) {
       console.error('Bulk generation failed:', err);
     }
@@ -265,21 +304,38 @@ export function App() {
     { id: 'preview', label: 'Preview & Generate', number: '03' },
   ];
 
+  // Auth Guard
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white font-sans">
+        <div className="w-9 h-9 rounded-full border-3 border-emerald-500 border-t-transparent animate-spin mb-3"></div>
+        <p className="text-xs text-slate-400 font-medium tracking-wide">
+          Securing Pioneer HR Payroll Session...
+        </p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPortal />;
+  }
+
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
+    <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
       {/* Sidebar */}
       <Sidebar
         currentTab={currentTab}
         onSelectTab={(tab) => setCurrentTab(tab)}
         activeBatchCount={batches.length}
-        templateCount={templates.length}
+        templateCount={1}
+        isAdmin={isAdmin}
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
         <main className="flex-1 p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {/* Page Title & Subtitle */}
-          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">
                 Pioneer Payslip Generator
@@ -289,12 +345,50 @@ export function App() {
               </p>
             </div>
 
-            {/* Active Template Badge */}
-            <div className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-xs flex items-center gap-2 self-start sm:self-auto">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span>Active Template: <strong className="text-slate-900">{activeTemplate.name}</strong></span>
+            {/* Right Header: Active Template Badge & User Initials Avatar */}
+            <div className="flex items-center gap-3 self-start sm:self-auto">
+              <div className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-xs flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Active Template: <strong className="text-slate-900">{template.name}</strong></span>
+              </div>
+              <UserAvatarPill />
             </div>
           </div>
+
+          {/* Active In-Progress Draft Banner (Refresh & Crash Resilience) - Only shown on Generate tab */}
+          {pendingDraft && currentTab === 'generate' && (
+            <div className="mb-6 p-4 bg-amber-50/90 border border-amber-300 rounded-xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-300">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 text-base font-bold shadow-xs">
+                  ✎
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+                    Unsaved Payroll Draft Restored
+                  </h4>
+                  <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                    You have an unfinalized session for <strong>{pendingDraft.payPeriod || pendingDraft.fileName}</strong> with <strong>{pendingDraft.employees.length} employees</strong> (including any manual adjustments made).
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleResumeDraft(pendingDraft)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs transition-colors"
+                >
+                  Resume Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="px-3 py-1.5 text-xs font-medium text-amber-900 hover:text-red-700 hover:bg-amber-100 rounded-lg border border-amber-300 transition-colors"
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Tab 1: Dashboard */}
           {currentTab === 'dashboard' && (
@@ -303,12 +397,11 @@ export function App() {
                 setCurrentTab('generate');
                 setWizardStep('upload');
               }}
-              onLoadSample={() => handleLoadSample()}
               onGoToHistory={() => setCurrentTab('history')}
               onGoToTemplates={() => setCurrentTab('templates')}
               recentBatches={batches}
               settings={settings}
-              activeTemplateName={activeTemplate.name}
+              activeTemplateName={template.name}
             />
           )}
 
@@ -362,7 +455,6 @@ export function App() {
               {wizardStep === 'upload' && (
                 <UploadStep
                   onDataParsed={handleDataParsed}
-                  onLoadSample={handleLoadSample}
                   settings={settings}
                   currentFile={uploadedFile}
                   parsedData={parsedSheetData}
@@ -387,16 +479,14 @@ export function App() {
                 />
               )}
 
-              {/* Step 3: Preview with Template Chooser */}
+              {/* Step 3: Preview with Form T */}
               {wizardStep === 'preview' && (
                 <PreviewStep
                   employees={employees}
                   selectedIds={selectedIds}
                   settings={settings}
-                  templates={templates}
-                  selectedTemplateId={selectedTemplateId}
-                  onSelectTemplate={(id) => setSelectedTemplateId(id)}
-                  onGoToTemplateEditor={() => setCurrentTab('templates')}
+                  template={template}
+                  onUpdateLogo={handleUpdateLogo}
                   initialEmployeeId={previewEmpId}
                   onBackToReview={() => setWizardStep('review')}
                   onStartBulkGeneration={(targets, tpl) => handleStartBulkGeneration(targets, tpl)}
@@ -405,15 +495,11 @@ export function App() {
             </div>
           )}
 
-          {/* Tab 3: Template Editor */}
-          {currentTab === 'templates' && (
+          {/* Tab 3: Template & Logo Settings (Admin Only) */}
+          {currentTab === 'templates' && isAdmin && (
             <TemplateEditorView
-              templates={templates}
-              selectedTemplateId={selectedTemplateId}
-              onSelectTemplate={(id) => setSelectedTemplateId(id)}
+              template={template}
               onSaveTemplate={handleSaveTemplate}
-              onDeleteTemplate={handleDeleteTemplate}
-              onDuplicateTemplate={handleDuplicateTemplate}
             />
           )}
 
@@ -422,12 +508,21 @@ export function App() {
             <GeneratedPayslipsPage
               batches={batches}
               settings={settings}
-              onClearBatches={() => setBatches([])}
+              template={template}
+              onClearBatches={async () => {
+                setBatches([]);
+                await clearAllBatchesFromSupabase();
+              }}
               onNewBatch={() => {
                 setCurrentTab('generate');
                 setWizardStep('upload');
               }}
             />
+          )}
+
+          {/* Tab 5: Team & Access Management (Admin Only) */}
+          {currentTab === 'team' && isAdmin && (
+            <UserManagementView />
           )}
         </main>
       </div>
@@ -439,8 +534,8 @@ export function App() {
         result={generationResult}
         employees={targetGenerationEmployees}
         settings={settings}
-        template={activeTemplate}
-        payPeriod={activeTemplate.payPeriod || targetGenerationEmployees[0]?.payPeriod || settings.defaultPayPeriod}
+        template={template}
+        payPeriod={template.payPeriod || targetGenerationEmployees[0]?.payPeriod || settings.defaultPayPeriod}
         onClose={() => setIsGenerating(false)}
         onViewGeneratedBatches={() => {
           setIsGenerating(false);

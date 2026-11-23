@@ -4,16 +4,15 @@ import {
   FileSpreadsheet, 
   Trash2, 
   Download, 
-  Sparkles,
   Layers
 } from 'lucide-react';
 import { parseSpreadsheetBuffer, ParsedSheetData } from '../utils/excelParser';
-import { downloadSamplePayrollTemplate, generateSample50Employees } from '../utils/sampleDataGenerator';
+import { downloadSamplePayrollTemplate } from '../utils/sampleDataGenerator';
 import { EmployeeRecord, CompanySettings } from '../types';
 
 interface UploadStepProps {
   onDataParsed: (data: ParsedSheetData, file: File | null) => void;
-  onLoadSample: (sampleEmployees: EmployeeRecord[]) => void;
+  onLoadSample?: (sampleEmployees: EmployeeRecord[]) => void;
   settings: CompanySettings;
   currentFile: File | null;
   parsedData: ParsedSheetData | null;
@@ -118,18 +117,6 @@ export const UploadStep: React.FC<UploadStepProps> = ({
             >
               <Download className="w-3.5 h-3.5 text-slate-500" />
               Download Excel Template
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const sample = generateSample50Employees(settings);
-                onLoadSample(sample);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md border border-emerald-200 transition-colors"
-              title="Load 50 sample employees for immediate testing"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              Load Sample 50 Records
             </button>
           </div>
         </div>

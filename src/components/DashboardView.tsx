@@ -1,7 +1,6 @@
 import React from 'react';
 import { 
   FileSpreadsheet, 
-  Sparkles, 
   Download, 
   Files, 
   ShieldCheck, 
@@ -18,7 +17,7 @@ import { formatIndianCurrency } from '../utils/numberToWords';
 
 interface DashboardViewProps {
   onStartUpload: () => void;
-  onLoadSample: () => void;
+  onLoadSample?: () => void;
   onGoToHistory: () => void;
   onGoToTemplates?: () => void;
   recentBatches: BatchHistoryItem[];
@@ -67,8 +66,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Three High-Utility Action Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* 2. Action Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Card 1: Direct File Upload */}
         <div 
           onClick={onStartUpload}
@@ -108,26 +107,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
           </div>
         </div>
-
-        {/* Card 3: Test with 50 Sample Employees */}
-        <div 
-          onClick={onLoadSample}
-          className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-purple-500 hover:shadow-md transition-all cursor-pointer group"
-        >
-          <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center font-bold text-sm mb-3 border border-purple-100 group-hover:bg-purple-600 group-hover:text-white transition-colors">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <h3 className="text-sm font-bold text-slate-900 group-hover:text-purple-700 transition-colors">
-            Load 50 Sample Employees
-          </h3>
-          <p className="text-slate-500 text-xs mt-1 leading-relaxed">
-            Instant 1-click test with verified payroll data to test templates and ZIP generation immediately.
-          </p>
-          <div className="mt-4 text-xs font-semibold text-purple-700 flex items-center gap-1">
-            <span>Load Sample Data</span>
-            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-          </div>
-        </div>
       </div>
 
       {/* 3. Operational Grid: Recent Generation History & Active Template Config */}
@@ -157,7 +136,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Files className="w-8 h-8 text-slate-300 mx-auto mb-2" />
               <p className="font-medium text-slate-600">No generation runs in current session.</p>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Upload a payroll file or load sample records to generate your first batch.
+                Upload a payroll file to generate your first batch.
               </p>
             </div>
           ) : (

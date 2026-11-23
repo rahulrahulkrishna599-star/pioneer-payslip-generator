@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pioneer Payslip Generator - Quick Start Guide</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen py-8 px-4 sm:px-6">
+
+  <div class="max-w-2xl mx-auto space-y-6">
+
+    <!-- Top Action Bar (Copy WhatsApp Message & Download Infographic) -->
+    <div class="bg-emerald-950/80 border border-emerald-500/40 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div>
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold tracking-wide">
+          <span>📲 WhatsApp Ready</span>
+        </div>
+        <h3 class="text-sm font-bold text-white mt-1">Want to share this on WhatsApp?</h3>
+        <p class="text-xs text-slate-300">Copy our pre-formatted message or download the graphic guide image directly.</p>
+      </div>
+      <div class="flex items-center gap-2.5 w-full sm:w-auto">
+        <a 
+          href="/pioneer_whatsapp_guide.jpg" 
+          download="Pioneer_Payslip_Generator_Guide.jpg"
+          class="flex-1 sm:flex-initial px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all border border-slate-700 shadow-md cursor-pointer shrink-0"
+        >
+          <span>🖼️</span>
+          <span>Save Picture</span>
+        </a>
+        <button 
+          id="copyBtn"
+          onclick="copyWhatsAppText()" 
+          class="flex-1 sm:flex-initial px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20 cursor-pointer shrink-0"
+        >
+          <span id="copyIcon">📋</span>
+          <span id="copyText">Copy Text</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Ready-Made Visual Infographic Image Card (One-click share) -->
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+      <div class="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <span class="text-emerald-400 text-sm">📱</span>
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200">
+            WhatsApp Infographic Picture (Click below to save or send)
+          </h2>
+        </div>
+        <a 
+          href="/pioneer_whatsapp_guide.jpg" 
+          download="Pioneer_Payslip_Generator_Guide.jpg"
+          class="text-xs font-bold text-emerald-400 hover:underline flex items-center gap-1"
+        >
+          <span>Download HD</span>
+          <span>↓</span>
+        </a>
+      </div>
+      <div class="p-2 bg-slate-900 flex justify-center">
+        <img 
+          src="/pioneer_whatsapp_guide.jpg" 
+          alt="Pioneer Payslip Generator Infographic Guide" 
+          class="rounded-2xl max-w-full sm:max-w-lg shadow-xl border border-slate-800 hover:scale-[1.01] transition-transform duration-200"
+        />
+      </div>
+    </div>
+
+    <!-- MAIN INFOGRAPHIC CARD (Perfect for mobile viewing & screenshots) -->
+    <div id="guideCard" class="bg-white text-slate-900 rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+      
+      <!-- Card Header -->
+      <div class="bg-slate-900 text-white p-6 sm:p-8 text-center relative border-b border-slate-800">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30 mb-3">
+          <span>⚡ Official HR Utility</span>
+        </div>
+        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+          PIONEER CORPORATION
+        </h1>
+        <p class="text-sm font-medium text-emerald-400 mt-1">
+          Form T Payslip Generator — Quick Start Guide
+        </p>
+        <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto leading-relaxed">
+          Convert raw payroll Excel sheets into statutory Tamil Nadu Form T payslip vector PDFs and ZIP packages in seconds.
+        </p>
+      </div>
+
+      <!-- Quick 3-Step Flow -->
+      <div class="p-6 sm:p-8 space-y-8 bg-slate-50/50">
+
+        <!-- Step 1 -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white font-extrabold text-sm flex items-center justify-center shrink-0">
+              1
+            </div>
+            <div>
+              <h2 class="text-sm font-bold text-slate-900">Step 1: Upload Payroll Spreadsheet</h2>
+              <p class="text-xs text-slate-500">Drag & drop any standard Excel (.xlsx) or CSV file</p>
+            </div>
+          </div>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            Upload your company's monthly payroll sheet. The app automatically maps employee IDs, names, earnings, PF, ESI, deductions, and net pay without complex configuration.
+          </p>
+          <div class="rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+            <img src="/guide_images/step1_upload.png" alt="Step 1 Upload" class="w-full object-cover max-h-56">
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white font-extrabold text-sm flex items-center justify-center shrink-0">
+              2
+            </div>
+            <div>
+              <h2 class="text-sm font-bold text-slate-900">Step 2: Review & Auto-Audit Records</h2>
+              <p class="text-xs text-slate-500">Instant validation of calculations and employee details</p>
+            </div>
+          </div>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            Inspect all parsed employee rows in an interactive table. Select individual employees or click <strong>Select All</strong> to prepare the batch for mass generation.
+          </p>
+          <div class="rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+            <img src="/guide_images/step2_review.png" alt="Step 2 Review" class="w-full object-cover max-h-56">
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white font-extrabold text-sm flex items-center justify-center shrink-0">
+              3
+            </div>
+            <div>
+              <h2 class="text-sm font-bold text-slate-900">Step 3: Preview Statutory Form T Wage Slip</h2>
+              <p class="text-xs text-slate-500">Tamil Nadu Shops & Establishments Act, 1948 Form T</p>
+            </div>
+          </div>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            View a 100% pixel-perfect vector A4 preview with the official Pioneer Corporation logo, company address, earnings/deductions breakdown, and official digital seal stamp.
+          </p>
+          <div class="rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+            <img src="/guide_images/step3_payslip.png" alt="Step 3 Form T Preview" class="w-full object-cover max-h-64 object-top">
+          </div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white font-extrabold text-sm flex items-center justify-center shrink-0">
+              4
+            </div>
+            <div>
+              <h2 class="text-sm font-bold text-slate-900">Step 4: 1-Click Mass PDF & ZIP Export</h2>
+              <p class="text-xs text-slate-500">Fast batch delivery to distribute to staff</p>
+            </div>
+          </div>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            Click <strong>Generate All Payslips</strong> to export crisp vector PDFs named by Employee ID, or click <strong>Download All as ZIP</strong> for instant bulk archiving.
+          </p>
+          <div class="rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+            <img src="/guide_images/step4_download.png" alt="Step 4 Download" class="w-full object-cover max-h-56">
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Feature Badges Grid -->
+      <div class="p-6 sm:p-8 bg-slate-900 text-white border-t border-slate-800">
+        <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-4 text-center">
+          Why Pioneer HR Payslip Generator?
+        </h4>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700/60">
+            <div class="text-xl mb-1">🔒</div>
+            <div class="text-xs font-bold">100% Private</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">Processed locally in your browser</div>
+          </div>
+          <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700/60">
+            <div class="text-xl mb-1">⚡</div>
+            <div class="text-xs font-bold">Ultra Fast</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">500+ PDFs in under 5 seconds</div>
+          </div>
+          <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700/60">
+            <div class="text-xl mb-1">⚖️</div>
+            <div class="text-xs font-bold">Form T Compliant</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">TN Shops & Establishments Act</div>
+          </div>
+          <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700/60">
+            <div class="text-xl mb-1">👥</div>
+            <div class="text-xs font-bold">Role Access</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">Admin-controlled logins</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Footer -->
+      <div class="p-4 bg-slate-950 text-slate-400 text-center text-xs border-t border-slate-800">
+        Pioneer Corporation • 358, Mettupalayam Road, Tatabad, Coimbatore - 641043, India
+      </div>
+
+    </div>
+
+    <!-- Hidden Raw WhatsApp Text Area for Copying -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2">
+      <div class="flex items-center justify-between text-xs font-bold text-slate-300">
+        <span>Preview of WhatsApp Message:</span>
+        <span class="text-emerald-400 font-normal">Ready to paste</span>
+      </div>
+      <div id="whatsappPreview" class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">
+*PIONEER CORPORATION — HR PAYSLIP GENERATOR*
+_Statutory Form T Wage Slip & Bulk PDF System_
+
+🔗 *Portal Link:* http://127.0.0.1:5173/
+
+📌 *What is this app?*
+A dedicated internal tool for Pioneer HR to turn monthly payroll Excel spreadsheets into official statutory Form T payslips in seconds.
+
+🚀 *How to use in 3 simple steps:*
+1️⃣ *Upload Spreadsheet:* Drop your monthly payroll Excel or CSV file.
+2️⃣ *Auto-Audit:* Review all employee salaries, earnings & deductions.
+3️⃣ *1-Click Export:* Generate individual Form T PDF payslips with official seal & download all in a ZIP file!
+
+✨ *Key Highlights:*
+✅ *100% In-Browser Privacy:* Payroll data never leaves your device.
+✅ *Statutory Compliant:* Form T (Tamil Nadu Shops & Establishments Act).
+✅ *Blazing Fast:* Generates 500+ payslips in seconds.
+✅ *Official Branding:* Automatic company logo, address & seal stamp.
+
+👉 *Open Portal:* http://127.0.0.1:5173/
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function copyWhatsAppText() {
+      const text = document.getElementById('whatsappPreview').innerText.trim();
+      navigator.clipboard.writeText(text).then(() => {
+        const copyBtn = document.getElementById('copyBtn');
+        const copyText = document.getElementById('copyText');
+        const copyIcon = document.getElementById('copyIcon');
+        
+        copyText.innerText = 'Copied to Clipboard!';
+        copyIcon.innerText = '✅';
+        copyBtn.classList.remove('bg-emerald-500', 'hover:bg-emerald-400');
+        copyBtn.classList.add('bg-white', 'text-emerald-900');
+
+        setTimeout(() => {
+          copyText.innerText = 'Copy WhatsApp Text';
+          copyIcon.innerText = '📋';
+          copyBtn.classList.remove('bg-white', 'text-emerald-900');
+          copyBtn.classList.add('bg-emerald-500', 'hover:bg-emerald-400');
+        }, 2500);
+      });
+    }
+  </script>
+</body>
+</html>

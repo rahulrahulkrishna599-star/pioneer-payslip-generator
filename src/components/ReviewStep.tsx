@@ -172,38 +172,6 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
             >
               All ({employees.length})
             </button>
-            <button
-              onClick={() => setStatusFilter('ready')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-                statusFilter === 'ready'
-                  ? 'bg-emerald-700 text-white'
-                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-              }`}
-            >
-              Ready ({readyCount})
-            </button>
-            <button
-              onClick={() => setStatusFilter('warning')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-                statusFilter === 'warning'
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-              }`}
-            >
-              Requires Review ({warningCount})
-            </button>
-            {errorCount > 0 && (
-              <button
-                onClick={() => setStatusFilter('error')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-                  statusFilter === 'error'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-red-50 text-red-800 hover:bg-red-100'
-                }`}
-              >
-                Invalid ({errorCount})
-              </button>
-            )}
           </div>
 
           {/* Sort Selector */}
@@ -260,14 +228,13 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                 <th className="py-2.5 px-3 text-right">Gross Earnings</th>
                 <th className="py-2.5 px-3 text-right">Total Deductions</th>
                 <th className="py-2.5 px-3 text-right">Net Payable</th>
-                <th className="py-2.5 px-3 text-center">Status</th>
                 <th className="py-2.5 px-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-slate-400">
+                  <td colSpan={8} className="py-8 text-center text-slate-400">
                     No employee records match the selected filter.
                   </td>
                 </tr>
@@ -325,55 +292,9 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                         {formatIndianCurrency(emp.calculatedNetPayable)}
                       </td>
 
-                      {/* Status */}
-                      <td className="py-2.5 px-3 text-center">
-                        {emp.validationStatus === 'ready' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            Ready
-                          </span>
-                        )}
-                        {emp.validationStatus === 'warning' && (
-                          <button
-                            type="button"
-                            onClick={() => setActiveIssueModal(emp)}
-                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 hover:bg-amber-100 transition-colors"
-                            title="Click to view warnings"
-                          >
-                            <AlertTriangle className="w-3 h-3 text-amber-600" />
-                            Review
-                          </button>
-                        )}
-                        {emp.validationStatus === 'error' && (
-                          <button
-                            type="button"
-                            onClick={() => setActiveIssueModal(emp)}
-                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-700 bg-red-50 px-2 py-0.5 rounded-full border border-red-200 hover:bg-red-100 transition-colors"
-                            title="Click to view errors"
-                          >
-                            <AlertCircle className="w-3 h-3 text-red-600" />
-                            Invalid
-                          </button>
-                        )}
-                      </td>
-
                       {/* Action */}
                       <td className="py-2.5 px-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingEmployee({ ...emp });
-                              setIsDirty(false);
-                              setShowDiscardConfirm(false);
-                              setShowSaveConfirm(false);
-                            }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 rounded border border-slate-300 transition-colors"
-                            title="Edit / Adjust Payslip"
-                          >
-                            <Edit3 className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Edit</span>
-                          </button>
                           <button
                             type="button"
                             onClick={() => onPreviewEmployee(emp)}
@@ -556,44 +477,53 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                     <span>Amount (₹)</span>
                   </div>
 
-                  {/* Standard Earnings */}
+                  {/* Form T Standard Earnings */}
                   {[
                     { label: 'Basic', key: 'basic' as const },
-                    { label: 'House Rent Allowance', key: 'hra' as const },
-                    { label: 'Water Allowance', key: 'waterAllowance' as const },
+                    { label: 'House Rent Allowance (HRA)', key: 'hra' as const },
+                    { label: 'Washing Allowance', key: 'washingAllowance' as const },
                     { label: 'Incentive', key: 'incentive' as const },
                     { label: 'Other Allowance', key: 'otherAllowance' as const },
-                    { label: 'DA', key: 'da' as const },
-                  ].map(({ label, key }) => (
-                    <div key={key} className="flex items-center justify-between gap-2">
-                      <span className="text-slate-700 text-xs">{label}</span>
-                      <input
-                        type="number"
-                        value={editingEmployee[key] || 0}
-                        onChange={(e) => {
-                          setIsDirty(true);
-                          const val = Number(e.target.value) || 0;
-                          const next = { ...editingEmployee, [key]: val };
-                          const addGross = (next.additionalEarnings || []).reduce(
-                            (s, item) => s + (Number(item.amount) || 0),
-                            0
-                          );
-                          const gross =
-                            (Number(next.basic) || 0) +
-                            (Number(next.hra) || 0) +
-                            (Number(next.waterAllowance) || 0) +
-                            (Number(next.incentive) || 0) +
-                            (Number(next.otherAllowance) || 0) +
-                            (Number(next.da) || 0) +
-                            addGross;
-                          next.grossEarnings = Math.round(gross * 100) / 100;
-                          next.calculatedNetPayable = Math.round((next.grossEarnings - next.totalDeductions) * 100) / 100;
-                          setEditingEmployee(next);
-                        }}
-                        className="w-28 text-right font-mono px-2 py-1 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:border-emerald-500"
-                      />
-                    </div>
-                  ))}
+                    { label: 'Previous Month', key: 'previousMonth' as const },
+                  ].map(({ label, key }) => {
+                    const tier = editingEmployee[key];
+                    return (
+                      <div key={key} className="flex items-center justify-between gap-2 py-0.5">
+                        <span className="text-slate-700 text-xs font-medium">{label}</span>
+                        <input
+                          type="number"
+                          value={tier?.earned ?? 0}
+                          onChange={(e) => {
+                            setIsDirty(true);
+                            const val = Number(e.target.value) || 0;
+                            const updatedTier = {
+                              fixed: tier?.fixed ?? val,
+                              earned: val,
+                              arrears: tier?.arrears ?? 0,
+                              total: Math.round((val + (tier?.arrears ?? 0)) * 100) / 100,
+                            };
+                            const next = { ...editingEmployee, [key]: updatedTier };
+                            const addGross = (next.additionalEarnings || []).reduce(
+                              (s, item) => s + (Number(item.total || item.earned) || 0),
+                              0
+                            );
+                            const gross =
+                              (next.basic?.total ?? 0) +
+                              (next.hra?.total ?? 0) +
+                              (next.washingAllowance?.total ?? 0) +
+                              (next.incentive?.total ?? 0) +
+                              (next.otherAllowance?.total ?? 0) +
+                              (next.previousMonth?.total ?? 0) +
+                              addGross;
+                            next.grossEarnings = Math.round(gross * 100) / 100;
+                            next.calculatedNetPayable = Math.round((next.grossEarnings - next.totalDeductions) * 100) / 100;
+                            setEditingEmployee(next);
+                          }}
+                          className="w-28 text-right font-mono px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs focus:bg-white focus:border-emerald-500"
+                        />
+                      </div>
+                    );
+                  })}
 
                   {/* Custom Additional Earnings */}
                   {(editingEmployee.additionalEarnings || []).map((item, idx) => {
@@ -630,21 +560,21 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                         />
                         <input
                           type="number"
-                          value={item.amount || 0}
+                          value={item.total ?? item.earned ?? item.amount ?? 0}
                           onChange={(e) => {
                             setIsDirty(true);
                             const val = Number(e.target.value) || 0;
                             const updated = [...(editingEmployee.additionalEarnings || [])];
-                            updated[idx] = { ...updated[idx], amount: val };
+                            updated[idx] = { ...updated[idx], fixed: val, earned: val, arrears: 0, total: val, amount: val };
                             const next = { ...editingEmployee, additionalEarnings: updated };
-                            const addGross = updated.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+                            const addGross = updated.reduce((s, it) => s + (Number(it.total ?? it.earned ?? it.amount) || 0), 0);
                             const gross =
-                              (Number(next.basic) || 0) +
-                              (Number(next.hra) || 0) +
-                              (Number(next.waterAllowance) || 0) +
-                              (Number(next.incentive) || 0) +
-                              (Number(next.otherAllowance) || 0) +
-                              (Number(next.da) || 0) +
+                              (next.basic?.total ?? 0) +
+                              (next.hra?.total ?? 0) +
+                              (next.washingAllowance?.total ?? 0) +
+                              (next.incentive?.total ?? 0) +
+                              (next.otherAllowance?.total ?? 0) +
+                              (next.previousMonth?.total ?? 0) +
                               addGross;
                             next.grossEarnings = Math.round(gross * 100) / 100;
                             next.calculatedNetPayable = Math.round((next.grossEarnings - next.totalDeductions) * 100) / 100;
@@ -687,14 +617,14 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                             setIsDirty(true);
                             const updated = (editingEmployee.additionalEarnings || []).filter((_, i) => i !== idx);
                             const next = { ...editingEmployee, additionalEarnings: updated };
-                            const addGross = updated.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+                            const addGross = updated.reduce((s, it) => s + (Number(it.total ?? it.earned ?? it.amount) || 0), 0);
                             const gross =
-                              (Number(next.basic) || 0) +
-                              (Number(next.hra) || 0) +
-                              (Number(next.waterAllowance) || 0) +
-                              (Number(next.incentive) || 0) +
-                              (Number(next.otherAllowance) || 0) +
-                              (Number(next.da) || 0) +
+                              (next.basic?.total ?? 0) +
+                              (next.hra?.total ?? 0) +
+                              (next.washingAllowance?.total ?? 0) +
+                              (next.incentive?.total ?? 0) +
+                              (next.otherAllowance?.total ?? 0) +
+                              (next.previousMonth?.total ?? 0) +
                               addGross;
                             next.grossEarnings = Math.round(gross * 100) / 100;
                             next.calculatedNetPayable = Math.round((next.grossEarnings - next.totalDeductions) * 100) / 100;
@@ -717,7 +647,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                     onClick={() => {
                       setIsDirty(true);
                       const current = editingEmployee.additionalEarnings || [];
-                      const updated = [...current, { name: `Custom Earning ${current.length + 1}`, amount: 0 }];
+                      const updated = [...current, { name: `Custom Earning ${current.length + 1}`, fixed: 0, earned: 0, arrears: 0, total: 0, amount: 0 }];
                       setEditingEmployee({ ...editingEmployee, additionalEarnings: updated });
                     }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition-colors w-full justify-center"
@@ -736,16 +666,16 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                     <span>Amount (₹)</span>
                   </div>
 
-                  {/* Standard Deductions */}
+                  {/* Form T Standard Deductions */}
                   {[
-                    { label: 'Income Tax (TDS)', key: 'incomeTax' as const },
                     { label: 'Provident Fund (PF)', key: 'providentFund' as const },
                     { label: 'ESI', key: 'esi' as const },
-                    { label: 'Previous Month', key: 'previousMonth' as const },
+                    { label: 'Income Tax (TDS)', key: 'tds' as const },
+                    { label: 'Professional Tax', key: 'professionalTax' as const },
                     { label: 'Other Deduction', key: 'otherDeduction' as const },
                   ].map(({ label, key }) => (
-                    <div key={key} className="flex items-center justify-between gap-2">
-                      <span className="text-slate-700 text-xs">{label}</span>
+                    <div key={key} className="flex items-center justify-between gap-2 py-0.5">
+                      <span className="text-slate-700 text-xs font-medium">{label}</span>
                       <input
                         type="number"
                         value={editingEmployee[key] || 0}
@@ -758,19 +688,17 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                             0
                           );
                           const ded =
-                            (Number(next.incomeTax) || 0) +
                             (Number(next.providentFund) || 0) +
                             (Number(next.esi) || 0) +
-                            (Number(next.previousMonth) || 0) +
+                            (Number(next.tds) || 0) +
+                            (Number(next.professionalTax) || 0) +
                             (Number(next.otherDeduction) || 0) +
-                            (Number(next.advance) || 0) +
-                            (Number(next.lateFine) || 0) +
                             addDed;
                           next.totalDeductions = Math.round(ded * 100) / 100;
                           next.calculatedNetPayable = Math.round((next.grossEarnings - next.totalDeductions) * 100) / 100;
                           setEditingEmployee(next);
                         }}
-                        className="w-28 text-right font-mono px-2 py-1 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:border-emerald-500"
+                        className="w-28 text-right font-mono px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs focus:bg-white focus:border-emerald-500"
                       />
                     </div>
                   ))}
@@ -819,10 +747,10 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                             const next = { ...editingEmployee, additionalDeductions: updated };
                             const addDed = updated.reduce((s, it) => s + (Number(it.amount) || 0), 0);
                             const ded =
-                              (Number(next.incomeTax) || 0) +
                               (Number(next.providentFund) || 0) +
                               (Number(next.esi) || 0) +
-                              (Number(next.previousMonth) || 0) +
+                              (Number(next.tds) || 0) +
+                              (Number(next.professionalTax) || 0) +
                               (Number(next.otherDeduction) || 0) +
                               (Number(next.advance) || 0) +
                               (Number(next.lateFine) || 0) +
@@ -870,10 +798,10 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                             const next = { ...editingEmployee, additionalDeductions: updated };
                             const addDed = updated.reduce((s, it) => s + (Number(it.amount) || 0), 0);
                             const ded =
-                              (Number(next.incomeTax) || 0) +
                               (Number(next.providentFund) || 0) +
                               (Number(next.esi) || 0) +
-                              (Number(next.previousMonth) || 0) +
+                              (Number(next.tds) || 0) +
+                              (Number(next.professionalTax) || 0) +
                               (Number(next.otherDeduction) || 0) +
                               (Number(next.advance) || 0) +
                               (Number(next.lateFine) || 0) +
@@ -1077,7 +1005,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                 onClick={() => {
                   if (onUpdateEmployee && editingEmployee) {
                     const cleanAddEarn = (editingEmployee.additionalEarnings || []).filter(
-                      (item) => item.name.trim().length > 0 || (Number(item.amount) || 0) > 0
+                      (item) => item.name.trim().length > 0 || (Number(item.total ?? item.earned ?? item.amount) || 0) > 0
                     );
                     const cleanAddDed = (editingEmployee.additionalDeductions || []).filter(
                       (item) => item.name.trim().length > 0 || (Number(item.amount) || 0) > 0
