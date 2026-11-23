@@ -1,3 +1,5 @@
+// @ts-ignore
+declare const process: { env: Record<string, string | undefined> };
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://hzdcxfpohrcilvqkbobt.supabase.co';
