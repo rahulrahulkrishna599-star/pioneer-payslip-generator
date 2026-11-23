@@ -3,19 +3,28 @@ import react from '@vitejs/plugin-react';
 import { createClient } from '@supabase/supabase-js';
 
 function adminAuthApiPlugin(env: Record<string, string>): Plugin {
-  const supabaseUrl = env.VITE_SUPABASE_URL || 'https://hzdcxfpohrcilvqkbobt.supabase.co';
-  const supabaseSecretKey = env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SECRET_KEY || '';
-
-  const supabaseAdmin = createClient(supabaseUrl, supabaseSecretKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
   return {
     name: 'admin-auth-api',
+    apply: 'serve',
     configureServer(server) {
+      const supabaseUrl = env.VITE_SUPABASE_URL || 'https://hzdcxfpohrcilvqkbobt.supabase.co';
+      const supabaseSecretKey = env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SECRET_KEY || '';
+
+      const supabaseAdmin = supabaseSecretKey
+        ? createClient(supabaseUrl, supabaseSecretKey, {
+            auth: { autoRefreshToken: false, persistSession: false },
+          })
+        : null;
+
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith('/api/admin/')) {
           return next();
+        }
+
+        if (!supabaseAdmin) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          return res.end(JSON.stringify({ success: false, error: 'SUPABASE_SECRET_KEY is not configured for local dev' }));
         }
 
         let body = '';
