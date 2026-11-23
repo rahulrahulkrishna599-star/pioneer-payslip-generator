@@ -1,6 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { UserProfile, AppRole } from '../types';
-import { signIn, signOut, getCurrentUserProfile, DEFAULT_SUPER_ADMIN } from '../services/authService';
+import { 
+  signIn, 
+  signOut, 
+  getCurrentUserProfile, 
+  getLocalSessionId, 
+  clearLocalSessionId,
+  DEFAULT_SUPER_ADMIN 
+} from '../services/authService';
 import { supabase } from '../lib/supabase';
 
 interface AuthContextType {
@@ -12,6 +19,9 @@ interface AuthContextType {
   login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  isSessionSuperseded: boolean;
+  supersededAt: string | null;
+  dismissSessionSuperseded: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,8 +29,33 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSessionSuperseded, setIsSessionSuperseded] = useState<boolean>(false);
+  const [supersededAt, setSupersededAt] = useState<string | null>(null);
 
-  // Load active session on initial mount
+  // 1. Concurrency Check: Verify active_session_id on server matches this browser's local session
+  const checkSessionConcurrency = useCallback(async () => {
+    try {
+      const localId = getLocalSessionId();
+      if (!localId) return;
+
+      const { data: { user: currentAuthUser } } = await supabase.auth.getUser();
+      if (!currentAuthUser) return;
+
+      const remoteSessionId = currentAuthUser.user_metadata?.active_session_id;
+      if (remoteSessionId && remoteSessionId !== localId) {
+        console.warn('⚠️ [Pioneer Auth] Concurrent session detected on another device/browser. Invalidation triggered.');
+        clearLocalSessionId();
+        await supabase.auth.signOut();
+        setUser(null);
+        setIsSessionSuperseded(true);
+        setSupersededAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      }
+    } catch {
+      // Ignore transient network errors to avoid false disconnects
+    }
+  }, []);
+
+  // 2. Load active session on initial mount
   useEffect(() => {
     let isMounted = true;
 
@@ -57,16 +92,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, []);
 
+  // 3. Concurrency Listeners: Periodic heartbeat + on-focus + storage sync
+  useEffect(() => {
+    if (!user) return;
+
+    // Heartbeat check every 10 seconds while logged in
+    const interval = setInterval(checkSessionConcurrency, 10000);
+
+    // Immediate check when browser tab regains focus or user returns
+    const handleFocus = () => {
+      checkSessionConcurrency();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    // Cross-tab detection in same browser
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'pioneer_active_session_id' && e.newValue && e.newValue !== getLocalSessionId()) {
+        checkSessionConcurrency();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [user, checkSessionConcurrency]);
+
   const login = async (identifier: string, password: string) => {
-    // Note: Do not toggle global isLoading to true during login.
-    // LoginPortal manages its own local button loading state.
-    // Setting global isLoading would cause App.tsx to unmount LoginPortal, destroying its error state and popups.
+    setIsSessionSuperseded(false);
+    setSupersededAt(null);
     const { profile } = await signIn(identifier, password);
     setUser(profile);
   };
 
   const logout = async () => {
     setIsLoading(true);
+    setIsSessionSuperseded(false);
+    setSupersededAt(null);
     try {
       await signOut();
       setUser(null);
@@ -78,6 +142,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const refreshProfile = async () => {
     const profile = await getCurrentUserProfile();
     setUser(profile);
+  };
+
+  const dismissSessionSuperseded = () => {
+    setIsSessionSuperseded(false);
+    setSupersededAt(null);
   };
 
   const role: AppRole = user?.role || 'operator';
@@ -95,6 +164,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         login,
         logout,
         refreshProfile,
+        isSessionSuperseded,
+        supersededAt,
+        dismissSessionSuperseded,
       }}
     >
       {children}

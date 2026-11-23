@@ -34,9 +34,18 @@ import { GeneratedPayslipsPage } from './components/GeneratedPayslipsPage';
 import { LoginPortal } from './components/auth/LoginPortal';
 import { UserAvatarPill } from './components/auth/UserAvatarPill';
 import { UserManagementView } from './components/UserManagementView';
+import { SessionSupersededModal } from './components/auth/SessionSupersededModal';
 
 export function App() {
-  const { isAuthenticated, isLoading, isAdmin, user } = useAuth();
+  const { 
+    isAuthenticated, 
+    isLoading, 
+    isAdmin, 
+    user,
+    isSessionSuperseded,
+    supersededAt,
+    dismissSessionSuperseded
+  } = useAuth();
   const [currentTab, setCurrentTab] = useState<AppTab>('generate');
   const [wizardStep, setWizardStep] = useState<WizardStep>('upload');
 
@@ -305,6 +314,15 @@ export function App() {
   ];
 
   // Auth Guard
+  if (isSessionSuperseded) {
+    return (
+      <SessionSupersededModal
+        supersededAt={supersededAt}
+        onDismiss={dismissSessionSuperseded}
+      />
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white font-sans">

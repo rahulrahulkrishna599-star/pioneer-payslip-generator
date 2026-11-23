@@ -2,6 +2,31 @@ import { supabase } from '../lib/supabase';
 import { UserProfile, AppRole } from '../types';
 
 const LOCAL_STORAGE_USERS_KEY = 'pioneer_team_profiles_cache_v1';
+const ACTIVE_SESSION_ID_KEY = 'pioneer_active_session_id';
+
+export function generateSessionId(): string {
+  return 'sess_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36);
+}
+
+export function getLocalSessionId(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_SESSION_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setLocalSessionId(id: string): void {
+  try {
+    localStorage.setItem(ACTIVE_SESSION_ID_KEY, id);
+  } catch {}
+}
+
+export function clearLocalSessionId(): void {
+  try {
+    localStorage.removeItem(ACTIVE_SESSION_ID_KEY);
+  } catch {}
+}
 
 // Default seeded Super Admin fallback for initial handover & offline resilience
 export const DEFAULT_SUPER_ADMIN: UserProfile = {
@@ -67,9 +92,34 @@ export async function signIn(identifier: string, password: string): Promise<{ pr
 
   // 3. Check if account is active
   if (!profile.isActive) {
+    clearLocalSessionId();
     await supabase.auth.signOut();
     throw new Error('Your account has been deactivated. Please contact your Pioneer HR Administrator.');
   }
+
+  // 4. Register Single-Active Session ID
+  const newSessionId = generateSessionId();
+  setLocalSessionId(newSessionId);
+
+  // Sync to Supabase auth user metadata so any other active device detects the new session
+  try {
+    await supabase.auth.updateUser({
+      data: {
+        active_session_id: newSessionId,
+        session_created_at: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.warn('Could not register active_session_id:', err);
+  }
+
+  // Also update user_profiles table if present
+  try {
+    await supabase.from('user_profiles').update({
+      active_session_id: newSessionId,
+      updated_at: new Date().toISOString(),
+    }).eq('id', data.user.id);
+  } catch {}
 
   return { profile };
 }
@@ -78,6 +128,7 @@ export async function signIn(identifier: string, password: string): Promise<{ pr
  * Signs out the current user and clears local session cache.
  */
 export async function signOut(): Promise<void> {
+  clearLocalSessionId();
   try {
     await supabase.auth.signOut();
   } catch (err) {
@@ -123,6 +174,17 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
   const authUser = data?.session?.user;
   if (!authUser) {
     return null;
+  }
+
+  // Ensure local session ID is initialized if not present
+  if (!getLocalSessionId()) {
+    const existingSessionId = authUser.user_metadata?.active_session_id || generateSessionId();
+    setLocalSessionId(existingSessionId);
+    if (!authUser.user_metadata?.active_session_id) {
+      supabase.auth.updateUser({
+        data: { active_session_id: existingSessionId, session_created_at: new Date().toISOString() },
+      }).catch(() => {});
+    }
   }
 
   const profile = await fetchUserProfile(authUser.id);

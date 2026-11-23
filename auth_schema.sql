@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
     full_name TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'operator', -- 'admin' | 'operator'
     is_active BOOLEAN NOT NULL DEFAULT true,
+    active_session_id TEXT,
+    last_active_at TIMESTAMPTZ DEFAULT now(),
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
