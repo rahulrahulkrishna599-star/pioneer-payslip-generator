@@ -1,4 +1,14 @@
-import { supabaseAdmin } from '../_supabaseAdmin';
+// @ts-ignore
+declare const process: { env: Record<string, string | undefined> };
+import { createClient } from '@supabase/supabase-js';
+
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://hzdcxfpohrcilvqkbobt.supabase.co';
+  const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || '';
+  return createClient(supabaseUrl, supabaseSecretKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
@@ -6,11 +16,13 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { email, password, fullName, role } = req.body || {};
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const { email, password, fullName, role } = body;
     if (!email || !password || !fullName) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
+    const supabaseAdmin = getSupabaseAdmin();
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,

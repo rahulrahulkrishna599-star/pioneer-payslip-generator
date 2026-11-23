@@ -1,4 +1,14 @@
-import { supabaseAdmin } from '../_supabaseAdmin';
+// @ts-ignore
+declare const process: { env: Record<string, string | undefined> };
+import { createClient } from '@supabase/supabase-js';
+
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://hzdcxfpohrcilvqkbobt.supabase.co';
+  const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || '';
+  return createClient(supabaseUrl, supabaseSecretKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
@@ -6,7 +16,9 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { userId } = req.body || {};
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const { userId } = body;
+    const supabaseAdmin = getSupabaseAdmin();
     const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
 
     try {

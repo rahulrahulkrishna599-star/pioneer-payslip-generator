@@ -1,4 +1,14 @@
-import { supabaseAdmin } from '../_supabaseAdmin';
+// @ts-ignore
+declare const process: { env: Record<string, string | undefined> };
+import { createClient } from '@supabase/supabase-js';
+
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://hzdcxfpohrcilvqkbobt.supabase.co';
+  const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || '';
+  return createClient(supabaseUrl, supabaseSecretKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'GET') {
@@ -6,6 +16,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const { data, error } = await supabaseAdmin.auth.admin.listUsers();
     if (error) {
       return res.status(400).json({ success: false, error: error.message });
