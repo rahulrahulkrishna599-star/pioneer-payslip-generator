@@ -302,25 +302,25 @@ export async function generatePayslipPdf(
   const col2MaxValW = 55;
 
   const leftSummaryRows = [
-    { label: 'Employee Name', val: emp.name },
-    { label: 'Employee ID', val: emp.id },
+    { label: 'Employee Name', val: emp.name || '-' },
+    { label: 'Employee ID', val: emp.id || '-' },
     { label: 'Date of Joining', val: emp.doj || '-' },
     { label: 'Date of Birth', val: emp.dob || '-' },
     { label: 'Department', val: emp.department || '-' },
     { label: 'Designation', val: emp.designation || '-' },
-    { label: 'Position', val: emp.position || 'Full Time' },
-    { label: 'Branch', val: emp.branch || 'Coimbatore' },
+    { label: 'Position', val: emp.position || '-' },
+    { label: 'Branch', val: emp.branch || '-' },
   ];
 
   const rightSummaryRows = [
     { label: 'Mobile Number', val: emp.mobile || '-' },
-    { label: 'Paid Days', val: String(emp.paidDays) },
-    { label: 'LOP Days', val: String(emp.lopDays) },
-    { label: 'Pay Date', val: payDate },
-    { label: 'Pay Period', val: payPeriod },
-    { label: 'Tax Regime', val: emp.taxRegime || 'Regular' },
-    { label: 'Professional Tax State', val: emp.ptState || 'Tamil Nadu' },
-    { label: 'Location', val: emp.location || 'Coimbatore' },
+    { label: 'Paid Days', val: emp.paidDays !== null && emp.paidDays !== undefined ? String(emp.paidDays) : '-' },
+    { label: 'LOP Days', val: emp.lopDays !== null && emp.lopDays !== undefined ? String(emp.lopDays) : '-' },
+    { label: 'Pay Date', val: payDate || '-' },
+    { label: 'Pay Period', val: payPeriod || '-' },
+    { label: 'Tax Regime', val: emp.taxRegime || '-' },
+    { label: 'Professional Tax State', val: emp.ptState || '-' },
+    { label: 'Location', val: emp.location || '-' },
   ];
 
   let rowY = summaryBoxY + 8.8;
@@ -419,6 +419,7 @@ export async function generatePayslipPdf(
     { label: 'ESI', amount: emp.esi },
     { label: 'TDS', amount: emp.tds },
     { label: 'Professional Tax', amount: emp.professionalTax },
+    { label: 'Salary Advance', amount: emp.salaryAdvance ?? emp.advance ?? null },
     { label: 'Other Deduction', amount: emp.otherDeduction },
   ];
   if (emp.additionalDeductions && emp.additionalDeductions.length > 0) {

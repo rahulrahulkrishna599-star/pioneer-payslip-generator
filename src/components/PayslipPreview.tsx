@@ -12,7 +12,7 @@ interface PayslipPreviewProps {
   isBlank?: boolean;
 }
 
-const BLANK_TIER = { fixed: 0, earned: 0, arrears: 0, total: 0 };
+const BLANK_TIER = { fixed: null, earned: null, arrears: null, total: null };
 
 const EMPTY_RECORD: EmployeeRecord = {
   id: '',
@@ -25,8 +25,8 @@ const EMPTY_RECORD: EmployeeRecord = {
   position: '',
   branch: '',
   mobile: '',
-  paidDays: 0,
-  lopDays: 0,
+  paidDays: null,
+  lopDays: null,
   payPeriod: '',
   payDate: '',
   taxRegime: '',
@@ -46,13 +46,14 @@ const EMPTY_RECORD: EmployeeRecord = {
   previousMonth: BLANK_TIER,
   additionalEarnings: [],
   grossEarnings: 0,
-  providentFund: 0,
-  esi: 0,
-  tds: 0,
-  professionalTax: 0,
-  otherDeduction: 0,
-  advance: 0,
-  lateFine: 0,
+  providentFund: null,
+  esi: null,
+  tds: null,
+  professionalTax: null,
+  otherDeduction: null,
+  salaryAdvance: null,
+  advance: null,
+  lateFine: null,
   additionalDeductions: [],
   totalDeductions: 0,
   calculatedNetPayable: 0,
@@ -108,6 +109,7 @@ export const PayslipPreview: React.FC<PayslipPreviewProps> = ({
     { label: 'ESI', amount: emp.esi },
     { label: 'TDS', amount: emp.tds },
     { label: 'Professional Tax', amount: emp.professionalTax },
+    { label: 'Salary Advance', amount: emp.salaryAdvance ?? emp.advance ?? null },
     { label: 'Other Deduction', amount: emp.otherDeduction },
   ];
 
@@ -228,11 +230,15 @@ export const PayslipPreview: React.FC<PayslipPreviewProps> = ({
             </div>
             <div className="flex justify-between border-b border-dotted border-slate-200 pb-0.5">
               <span className="text-slate-500 text-[11px]">Paid Days</span>
-              <span className="font-mono font-bold text-slate-900 text-[11px]">{isBlank ? '—' : emp.paidDays}</span>
+              <span className="font-mono font-bold text-slate-900 text-[11px]">
+                {isBlank ? '—' : (emp.paidDays !== null && emp.paidDays !== undefined ? emp.paidDays : '—')}
+              </span>
             </div>
             <div className="flex justify-between border-b border-dotted border-slate-200 pb-0.5">
               <span className="text-slate-500 text-[11px]">LOP Days</span>
-              <span className="font-mono font-bold text-slate-900 text-[11px]">{isBlank ? '—' : emp.lopDays}</span>
+              <span className="font-mono font-bold text-slate-900 text-[11px]">
+                {isBlank ? '—' : (emp.lopDays !== null && emp.lopDays !== undefined ? emp.lopDays : '—')}
+              </span>
             </div>
             <div className="flex justify-between border-b border-dotted border-slate-200 pb-0.5">
               <span className="text-slate-500 text-[11px]">Pay Date</span>

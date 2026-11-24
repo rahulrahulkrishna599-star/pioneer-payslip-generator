@@ -128,10 +128,17 @@ export function numberToIndianWords(amount: number): string {
 }
 
 /**
- * Formats a number in Indian currency style (e.g., 61,000.00 or 1,25,000.50)
+ * Formats a number in Indian currency style (e.g., 61,000.00 or 1,25,000.50).
+ * If amount is null, undefined, or NaN, returns '—' (em-dash).
  */
-export function formatIndianCurrency(amount: number, showSymbol: boolean = true): string {
-  if (isNaN(amount)) return showSymbol ? '₹0.00' : '0.00';
+export function formatIndianCurrency(
+  amount: number | null | undefined,
+  showSymbol: boolean = true,
+  emptyFallback: string = '—'
+): string {
+  if (amount === null || amount === undefined || isNaN(amount)) {
+    return emptyFallback;
+  }
   const isNegative = amount < 0;
   const abs = Math.abs(amount).toFixed(2);
   const [intPart, decPart] = abs.split('.');

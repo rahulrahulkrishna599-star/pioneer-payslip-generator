@@ -66,17 +66,17 @@ export interface ColumnMapping {
 }
 
 export interface EarningTier {
-  fixed: number;
-  earned: number;
-  arrears: number;
-  total: number;
+  fixed: number | null;
+  earned: number | null;
+  arrears: number | null;
+  total: number | null;
 }
 
 export interface AdditionalEarning {
   name: string;
-  fixed?: number;
+  fixed?: number | null;
   earned: number;
-  arrears?: number;
+  arrears?: number | null;
   total: number;
   amount?: number;
   confirmed?: boolean;
@@ -99,8 +99,8 @@ export interface EmployeeRecord {
   position: string;
   branch: string;
   mobile: string;
-  paidDays: number;
-  lopDays: number;
+  paidDays: number | null;
+  lopDays: number | null;
   payPeriod: string;
   payDate: string;
   taxRegime: string;
@@ -126,13 +126,14 @@ export interface EmployeeRecord {
   grossEarnings: number;
 
   // Form T Deductions Breakdown
-  providentFund: number;
-  esi: number;
-  tds: number;
-  professionalTax: number;
-  otherDeduction: number;
-  advance?: number;
-  lateFine?: number;
+  providentFund: number | null;
+  esi: number | null;
+  tds: number | null;
+  professionalTax: number | null;
+  otherDeduction: number | null;
+  salaryAdvance?: number | null;
+  advance?: number | null;
+  lateFine?: number | null;
   additionalDeductions: { name: string; amount: number }[];
   totalDeductions: number;
 

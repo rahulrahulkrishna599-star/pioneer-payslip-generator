@@ -412,10 +412,10 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                 </label>
                 <input
                   type="number"
-                  value={editingEmployee.paidDays}
+                  value={editingEmployee.paidDays ?? ''}
                   onChange={(e) => {
                     setIsDirty(true);
-                    setEditingEmployee({ ...editingEmployee, paidDays: Number(e.target.value) || 0 });
+                    setEditingEmployee({ ...editingEmployee, paidDays: e.target.value === '' ? null : Number(e.target.value) });
                   }}
                   className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-900"
                 />
@@ -427,10 +427,10 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                 </label>
                 <input
                   type="number"
-                  value={editingEmployee.lopDays}
+                  value={editingEmployee.lopDays ?? ''}
                   onChange={(e) => {
                     setIsDirty(true);
-                    setEditingEmployee({ ...editingEmployee, lopDays: Number(e.target.value) || 0 });
+                    setEditingEmployee({ ...editingEmployee, lopDays: e.target.value === '' ? null : Number(e.target.value) });
                   }}
                   className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-900"
                 />
@@ -672,17 +672,21 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                     { label: 'ESI', key: 'esi' as const },
                     { label: 'Income Tax (TDS)', key: 'tds' as const },
                     { label: 'Professional Tax', key: 'professionalTax' as const },
+                    { label: 'Salary Advance', key: 'salaryAdvance' as const },
                     { label: 'Other Deduction', key: 'otherDeduction' as const },
                   ].map(({ label, key }) => (
                     <div key={key} className="flex items-center justify-between gap-2 py-0.5">
                       <span className="text-slate-700 text-xs font-medium">{label}</span>
                       <input
                         type="number"
-                        value={editingEmployee[key] || 0}
+                        value={editingEmployee[key] ?? 0}
                         onChange={(e) => {
                           setIsDirty(true);
                           const val = Number(e.target.value) || 0;
                           const next = { ...editingEmployee, [key]: val };
+                          if (key === 'salaryAdvance') {
+                            next.advance = val;
+                          }
                           const addDed = (next.additionalDeductions || []).reduce(
                             (s, item) => s + (Number(item.amount) || 0),
                             0
@@ -692,6 +696,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                             (Number(next.esi) || 0) +
                             (Number(next.tds) || 0) +
                             (Number(next.professionalTax) || 0) +
+                            (Number(next.salaryAdvance ?? next.advance) || 0) +
                             (Number(next.otherDeduction) || 0) +
                             addDed;
                           next.totalDeductions = Math.round(ded * 100) / 100;
