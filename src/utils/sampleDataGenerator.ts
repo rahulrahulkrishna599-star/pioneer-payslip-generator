@@ -253,6 +253,7 @@ export function generateSample50Employees(settings: CompanySettings = PIONEER_DE
 
     employees.push({
       id: empId,
+      recordKey: `${empId}__${settings.defaultPayPeriod.replace(/\s+/g, '_')}__${i}`,
       name: `${staff.name} ${i}`,
       sex: i % 3 === 0 ? 'F' : 'M',
       doj: '15-01-2025',
@@ -260,15 +261,15 @@ export function generateSample50Employees(settings: CompanySettings = PIONEER_DE
       department: staff.dept,
       designation: staff.role,
       position: 'Full Time',
-      branch: 'Coimbatore',
+      branch: i % 4 === 0 ? 'Chennai' : i % 3 === 0 ? 'Bengaluru' : 'Coimbatore',
       mobile: `98420${String(i).padStart(5, '0')}`,
-      paidDays: 26,
+      paidDays: i % 12 === 0 ? 25 : 26,
       lopDays: i % 12 === 0 ? 1 : 0,
       payPeriod: settings.defaultPayPeriod,
       payDate: settings.defaultPayDate,
       taxRegime: 'Regular',
       ptState: 'Tamil Nadu',
-      location: 'Coimbatore',
+      location: i % 4 === 0 ? 'Chennai' : i % 3 === 0 ? 'Bengaluru' : 'Coimbatore',
 
       uanNumber: staff.uan,
       esiNumber: '-',

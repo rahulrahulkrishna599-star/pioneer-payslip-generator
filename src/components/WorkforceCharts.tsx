@@ -1023,7 +1023,8 @@ export const WorkforceCharts: React.FC<WorkforceChartsProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800">
-                {paginatedEmployees.map((emp) => {
+                {paginatedEmployees.map((emp, idx) => {
+                  const rowKey = emp.recordKey || `${emp.id}_${emp.payPeriod}_${idx}`;
                   const locationText = emp.location || emp.branch || '—';
                   const designationText = emp.designation || '—';
                   const initials = emp.name
@@ -1035,7 +1036,7 @@ export const WorkforceCharts: React.FC<WorkforceChartsProps> = ({
                     .toUpperCase() || 'PC';
 
                   return (
-                    <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={rowKey} className="hover:bg-slate-50/80 transition-colors">
                       {/* Name & ID */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">

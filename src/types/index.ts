@@ -90,6 +90,8 @@ export interface AdditionalDeduction {
 
 export interface EmployeeRecord {
   id: string;
+  /** Unique per-row key (distinguishes same employee across different pay periods/months) */
+  recordKey?: string;
   name: string;
   sex?: string;
   doj: string;
@@ -193,3 +195,13 @@ export interface UserProfile {
 
 export type AppTab = 'dashboard' | 'generate' | 'templates' | 'history' | 'team';
 export type WizardStep = 'upload' | 'review' | 'preview';
+
+/**
+ * Returns a stable unique key per payslip row so multiple months for the same
+ * employee ID never collide in selection sets, React lists, or ZIP exports.
+ */
+export function getEmployeeRecordKey(emp: Pick<EmployeeRecord, 'id' | 'payPeriod' | 'recordKey'>): string {
+  if (emp.recordKey) return emp.recordKey;
+  const periodPart = (emp.payPeriod || '').trim().toLowerCase().replace(/\s+/g, '_');
+  return periodPart ? `${emp.id}__${periodPart}` : emp.id;
+}

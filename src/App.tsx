@@ -6,7 +6,8 @@ import {
   EmployeeRecord, 
   ColumnMapping, 
   BatchHistoryItem,
-  PayslipTemplate
+  PayslipTemplate,
+  getEmployeeRecordKey
 } from './types';
 import { PIONEER_DEFAULT_SETTINGS } from './utils/sampleDataGenerator';
 import { ParsedSheetData, parseSpreadsheetBuffer, transformRowsToEmployees } from './utils/excelParser';
@@ -199,9 +200,11 @@ export function App() {
     });
     setEmployees(transformed);
 
-    // Default select all valid employees
-    const validIds = new Set(transformed.filter((e) => e.validationStatus !== 'error').map((e) => e.id));
-    setSelectedIds(validIds);
+    // Default select all valid employee rows using unique per-row recordKey
+    const validKeys = new Set(
+      transformed.filter((e) => e.validationStatus !== 'error').map((e) => getEmployeeRecordKey(e))
+    );
+    setSelectedIds(validKeys);
 
     // Directly advance to Employee Data Review (auto-mapped in code)
     setWizardStep('review');
@@ -230,28 +233,31 @@ export function App() {
     setWizardStep('upload');
   };
 
-  // Selection toggle
-  const handleToggleSelect = (id: string) => {
+  // Selection toggle (keyed by per-row recordKey)
+  const handleToggleSelect = (recordKey: string) => {
     const next = new Set(selectedIds);
-    if (next.has(id)) {
-      next.delete(id);
+    if (next.has(recordKey)) {
+      next.delete(recordKey);
     } else {
-      next.add(id);
+      next.add(recordKey);
     }
     setSelectedIds(next);
   };
 
   const handleToggleSelectAll = () => {
-    if (selectedIds.size === employees.length) {
+    const validRecords = employees.filter((e) => e.validationStatus !== 'error');
+    const validKeys = validRecords.map((e) => getEmployeeRecordKey(e));
+    const allSelected = validKeys.length > 0 && validKeys.every((k) => selectedIds.has(k));
+    if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(employees.filter((e) => e.validationStatus !== 'error').map((e) => e.id)));
+      setSelectedIds(new Set(validKeys));
     }
   };
 
   // Individual preview action from review table
   const handlePreviewIndividual = (emp: EmployeeRecord) => {
-    setPreviewEmpId(emp.id);
+    setPreviewEmpId(getEmployeeRecordKey(emp));
     setWizardStep('preview');
   };
 
@@ -281,11 +287,19 @@ export function App() {
 
       setGenerationResult(res);
 
+      // Determine ZIP period label (supports multi-month uploads cleanly)
+      const distinctPeriods = Array.from(
+        new Set(targetEmployees.map((e) => (e.payPeriod || tpl.payPeriod || settings.defaultPayPeriod).trim()).filter(Boolean))
+      );
+      const batchPeriodLabel = distinctPeriods.length > 1
+        ? `Multi_Month_${distinctPeriods.length}_Periods`
+        : (distinctPeriods[0] || tpl.payPeriod || settings.defaultPayPeriod);
+
       const newBatch: BatchHistoryItem = {
         id: `batch_${Date.now()}`,
         date: new Date().toLocaleString('en-GB'),
         fileName: uploadedFile?.name || 'Pioneer_Payroll_Batch.xlsx',
-        payPeriod: tpl.payPeriod || targetEmployees[0]?.payPeriod || settings.defaultPayPeriod,
+        payPeriod: batchPeriodLabel,
         templateName: tpl.name,
         totalCount: targetEmployees.length,
         successCount: res.successfulCount,
@@ -296,9 +310,57 @@ export function App() {
 
       (newBatch as any)._zipBlob = res.zipBlob;
 
-      setBatches((prev) => [newBatch, ...prev]);
+      // Update local batches state grouped by period (mirroring Supabase deduplication)
+      setBatches((prev) => {
+        const updated = [...prev];
+        const byPeriod = new Map<string, EmployeeRecord[]>();
+        targetEmployees.forEach((emp) => {
+          const p = (emp.payPeriod || tpl.payPeriod || settings.defaultPayPeriod).trim();
+          const list = byPeriod.get(p) || [];
+          list.push(emp);
+          byPeriod.set(p, list);
+        });
 
-      // Persist completed batch to Supabase and upload ZIP archive to cloud storage
+        for (const [periodName, periodEmps] of byPeriod.entries()) {
+          const existingIdx = updated.findIndex((b) => b.payPeriod === periodName);
+          if (existingIdx >= 0) {
+            const existing = updated[existingIdx];
+            const empMap = new Map<string, EmployeeRecord>();
+            existing.employees.forEach((e) => empMap.set(e.id, e));
+            periodEmps.forEach((e) => empMap.set(e.id, e));
+            const merged = Array.from(empMap.values());
+            updated[existingIdx] = {
+              ...existing,
+              date: newBatch.date,
+              fileName: newBatch.fileName,
+              totalCount: merged.length,
+              successCount: merged.filter((e) => e.validationStatus !== 'error').length,
+              employees: merged,
+              _zipBlob: distinctPeriods.length === 1 ? res.zipBlob : (existing as any)._zipBlob,
+            } as BatchHistoryItem;
+          } else {
+            const periodBatch: BatchHistoryItem = {
+              id: `batch_${Date.now()}_${periodName.replace(/\s+/g, '_')}`,
+              date: newBatch.date,
+              fileName: newBatch.fileName,
+              payPeriod: periodName,
+              templateName: tpl.name,
+              totalCount: periodEmps.length,
+              successCount: periodEmps.filter((e) => e.validationStatus !== 'error').length,
+              failedCount: periodEmps.filter((e) => e.validationStatus === 'error').length,
+              employees: periodEmps,
+              generatedBlobs: newBatch.generatedBlobs,
+            };
+            if (distinctPeriods.length === 1) {
+              (periodBatch as any)._zipBlob = res.zipBlob;
+            }
+            updated.unshift(periodBatch);
+          }
+        }
+        return updated;
+      });
+
+      // Persist completed batch(es) to Supabase grouped by period and upload ZIP archive
       await saveBatchToSupabase(newBatch, res.zipBlob);
       // Clean up in-progress draft since batch is finalized
       await clearActiveDraft();
@@ -501,7 +563,10 @@ export function App() {
                   onProceedToPreview={() => setWizardStep('preview')}
                   onBackToUpload={() => setWizardStep('upload')}
                   onUpdateEmployee={(updated) => {
-                    setEmployees((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+                    const updatedKey = getEmployeeRecordKey(updated);
+                    setEmployees((prev) =>
+                      prev.map((e) => (getEmployeeRecordKey(e) === updatedKey ? updated : e))
+                    );
                   }}
                 />
               )}
@@ -562,7 +627,14 @@ export function App() {
         employees={targetGenerationEmployees}
         settings={settings}
         template={template}
-        payPeriod={template.payPeriod || targetGenerationEmployees[0]?.payPeriod || settings.defaultPayPeriod}
+        payPeriod={(() => {
+          const periods = Array.from(
+            new Set(targetGenerationEmployees.map((e) => e.payPeriod).filter(Boolean))
+          );
+          return periods.length > 1
+            ? `Multi_Month_${periods.length}_Periods`
+            : (periods[0] || template.payPeriod || settings.defaultPayPeriod);
+        })()}
         isAdmin={isAdmin}
         onClose={() => setIsGenerating(false)}
         onViewGeneratedBatches={() => {

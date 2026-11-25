@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { CompanySettings, EmployeeRecord, PayslipTemplate } from '../types';
+import { CompanySettings, EmployeeRecord, PayslipTemplate, getEmployeeRecordKey } from '../types';
 import { generatePayslipPdf, getPayslipPdfFilename } from './pdfGenerator';
 
 export interface BulkGenerationProgress {
@@ -42,7 +42,11 @@ export async function generateBulkPayslipsAndZip(
 
   for (let i = 0; i < total; i++) {
     const emp = employees[i];
-    const fileName = getPayslipPdfFilename(emp, template);
+    let fileName = getPayslipPdfFilename(emp, template);
+    if (zip.file(fileName)) {
+      fileName = fileName.replace(/\.pdf$/i, `_${i + 1}.pdf`);
+    }
+    const blobKey = getEmployeeRecordKey(emp);
 
     onProgress({
       total,
@@ -50,7 +54,7 @@ export async function generateBulkPayslipsAndZip(
       successful,
       failed,
       remaining: total - i,
-      currentEmployee: `${emp.id} - ${emp.name}`,
+      currentEmployee: `${emp.id} - ${emp.name}${emp.payPeriod ? ` (${emp.payPeriod})` : ''}`,
       isFinished: false,
       errors,
     });
@@ -64,7 +68,7 @@ export async function generateBulkPayslipsAndZip(
       const arrayBuffer = await pdfBlob.arrayBuffer();
 
       zip.file(fileName, arrayBuffer);
-      pdfBlobs.set(emp.id, { filename: fileName, blob: pdfBlob });
+      pdfBlobs.set(blobKey, { filename: fileName, blob: pdfBlob });
       successful++;
     } catch (err: any) {
       console.error(`Failed generating PDF for ${emp.id}:`, err);

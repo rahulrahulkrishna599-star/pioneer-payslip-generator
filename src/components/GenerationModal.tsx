@@ -7,7 +7,7 @@ import {
   FileCheck
 } from 'lucide-react';
 import { BulkGenerationProgress, BulkGenerationResult, downloadZipFile } from '../utils/zipGenerator';
-import { EmployeeRecord, CompanySettings, PayslipTemplate } from '../types';
+import { EmployeeRecord, CompanySettings, PayslipTemplate, getEmployeeRecordKey } from '../types';
 import { downloadIndividualPayslipPdf } from '../utils/pdfGenerator';
 
 interface GenerationModalProps {
@@ -147,9 +147,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({
                 <span className="text-slate-400">{employees.length} files</span>
               </div>
               <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 text-xs">
-                {employees.map((emp) => (
+                {employees.map((emp, idx) => (
                   <div
-                    key={emp.id}
+                    key={getEmployeeRecordKey(emp) + '_' + idx}
                     className="flex items-center justify-between px-3 py-2 hover:bg-slate-50"
                   >
                     <div className="flex items-center gap-2 min-w-0">
@@ -158,6 +158,11 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({
                         {emp.id}
                       </span>
                       <span className="text-slate-800 truncate">{emp.name}</span>
+                      {emp.payPeriod && (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium shrink-0">
+                          {emp.payPeriod}
+                        </span>
+                      )}
                     </div>
 
                     <button

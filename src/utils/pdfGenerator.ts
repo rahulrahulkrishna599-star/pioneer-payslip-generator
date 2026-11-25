@@ -8,7 +8,7 @@ import { PIONEER_DEFAULT_LOGO_URL } from './pioneerAssets';
 export function getPayslipPdfFilename(emp: EmployeeRecord, template?: PayslipTemplate): string {
   const safeId = emp.id.replace(/[^a-zA-Z0-9_-]/g, '_');
   const safeName = emp.name.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_').toUpperCase();
-  const period = template?.payPeriod || emp.payPeriod || 'October_2026';
+  const period = emp.payPeriod || template?.payPeriod || 'October_2026';
   const safePeriod = period.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_');
   return `Payslip_${safeId}_${safeName}_${safePeriod}.pdf`;
 }
@@ -209,8 +209,8 @@ export async function generatePayslipPdf(
     template?.cityPincode || 'Coimbatore - 641043',
     template?.country || 'India'
   );
-  const payPeriod = template?.payPeriod || emp.payPeriod || 'October 2026';
-  const payDate = template?.payDate || emp.payDate || '01/11/2026';
+  const payPeriod = emp.payPeriod || template?.payPeriod || 'October 2026';
+  const payDate = emp.payDate || template?.payDate || '01/11/2026';
   const logoUrl = template?.logoUrl || settings.logoUrl || PIONEER_DEFAULT_LOGO_URL;
 
   // 1. TOP HEADER: LOGO & COMPANY INFO

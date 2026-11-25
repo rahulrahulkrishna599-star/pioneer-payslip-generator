@@ -80,8 +80,8 @@ export const PayslipPreview: React.FC<PayslipPreviewProps> = ({
     template?.country ?? 'India'
   );
 
-  const payPeriodText = template?.payPeriod || (isBlank ? '—' : emp.payPeriod) || '—';
-  const payDateText = template?.payDate || (isBlank ? '—' : emp.payDate) || '—';
+  const payPeriodText = (isBlank ? '—' : emp.payPeriod) || template?.payPeriod || '—';
+  const payDateText = (isBlank ? '—' : emp.payDate) || template?.payDate || '—';
   const logoSrc = template?.logoUrl || settings?.logoUrl || PIONEER_DEFAULT_LOGO_URL;
 
   // Earnings Rows

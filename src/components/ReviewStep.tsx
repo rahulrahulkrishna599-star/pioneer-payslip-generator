@@ -15,7 +15,7 @@ import {
   Trash2,
   Check
 } from 'lucide-react';
-import { EmployeeRecord } from '../types';
+import { EmployeeRecord, getEmployeeRecordKey } from '../types';
 import { formatIndianCurrency } from '../utils/numberToWords';
 
 interface ReviewStepProps {
@@ -44,7 +44,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
   const handleBackToUpload = onBackToUpload || onBackToMapping;
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'ready' | 'warning' | 'error'>('all');
-  const [sortBy, setSortBy] = useState<'id' | 'name' | 'net'>('id');
+  const [sortBy, setSortBy] = useState<'id' | 'name' | 'period' | 'net'>('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [activeIssueModal, setActiveIssueModal] = useState<EmployeeRecord | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<EmployeeRecord | null>(null);
@@ -76,7 +76,8 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
           const matchId = emp.id.toLowerCase().includes(term);
           const matchName = emp.name.toLowerCase().includes(term);
           const matchDesig = emp.designation.toLowerCase().includes(term);
-          if (!matchId && !matchName && !matchDesig) return false;
+          const matchPeriod = (emp.payPeriod || '').toLowerCase().includes(term);
+          if (!matchId && !matchName && !matchDesig && !matchPeriod) return false;
         }
 
         // Status filter
@@ -90,8 +91,11 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
         let cmp = 0;
         if (sortBy === 'id') {
           cmp = a.id.localeCompare(b.id, undefined, { numeric: true });
+          if (cmp === 0) cmp = (a.payPeriod || '').localeCompare(b.payPeriod || '');
         } else if (sortBy === 'name') {
           cmp = a.name.localeCompare(b.name);
+        } else if (sortBy === 'period') {
+          cmp = (a.payPeriod || '').localeCompare(b.payPeriod || '');
         } else if (sortBy === 'net') {
           cmp = a.calculatedNetPayable - b.calculatedNetPayable;
         }
@@ -104,7 +108,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
   const errorCount = employees.filter((e) => e.validationStatus === 'error').length;
 
   const validSelectedCount = employees.filter(
-    (e) => selectedIds.has(e.id) && e.validationStatus !== 'error'
+    (e) => selectedIds.has(getEmployeeRecordKey(e)) && e.validationStatus !== 'error'
   ).length;
 
   return (
@@ -153,7 +157,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search by ID, name or role..."
+              placeholder="Search by ID, name, role or month..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500"
@@ -161,10 +165,10 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
           </div>
 
           {/* Status Tabs */}
-          <div className="flex items-center gap-1 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
             <button
               onClick={() => setStatusFilter('all')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer ${
                 statusFilter === 'all'
                   ? 'bg-slate-900 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -172,6 +176,18 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
             >
               All ({employees.length})
             </button>
+            {errorCount > 0 && (
+              <button
+                onClick={() => setStatusFilter('error')}
+                className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer ${
+                  statusFilter === 'error'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
+                }`}
+              >
+                Errors ({errorCount})
+              </button>
+            )}
           </div>
 
           {/* Sort Selector */}
@@ -184,6 +200,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
             >
               <option value="id">Employee ID</option>
               <option value="name">Name</option>
+              <option value="period">Pay Period</option>
               <option value="net">Net Payable</option>
             </select>
             <button
@@ -204,12 +221,12 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
             <input
               type="checkbox"
               id="select-all"
-              checked={selectedIds.size === employees.length && employees.length > 0}
+              checked={validSelectedCount > 0 && validSelectedCount === readyCount + warningCount}
               onChange={onToggleSelectAll}
               className="w-3.5 h-3.5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
             />
             <label htmlFor="select-all" className="font-semibold text-slate-700 cursor-pointer">
-              Select All ({selectedIds.size} / {employees.length} selected)
+              Select All ({validSelectedCount} / {employees.length} selected)
             </label>
           </div>
           <div className="text-slate-400">
@@ -224,6 +241,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                 <th className="py-2.5 px-3 w-8"></th>
                 <th className="py-2.5 px-3">Emp ID</th>
                 <th className="py-2.5 px-3">Employee Name</th>
+                <th className="py-2.5 px-3">Pay Period</th>
                 <th className="py-2.5 px-3">Designation</th>
                 <th className="py-2.5 px-3 text-right">Gross Earnings</th>
                 <th className="py-2.5 px-3 text-right">Total Deductions</th>
@@ -234,19 +252,20 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={9} className="py-8 text-center text-slate-400">
                     No employee records match the selected filter.
                   </td>
                 </tr>
               ) : (
                 filteredEmployees.map((emp) => {
-                  const isSelected = selectedIds.has(emp.id);
+                  const rowKey = getEmployeeRecordKey(emp);
+                  const isSelected = selectedIds.has(rowKey);
                   const isError = emp.validationStatus === 'error';
                   const isWarning = emp.validationStatus === 'warning';
 
                   return (
                     <tr
-                      key={emp.id}
+                      key={rowKey}
                       className={`hover:bg-slate-50 transition-colors ${
                         isSelected ? 'bg-emerald-50/20' : ''
                       } ${isError ? 'bg-red-50/30' : ''}`}
@@ -257,19 +276,38 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                           type="checkbox"
                           checked={isSelected}
                           disabled={isError}
-                          onChange={() => onToggleSelect(emp.id)}
+                          onChange={() => onToggleSelect(rowKey)}
                           className="w-3.5 h-3.5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer disabled:opacity-30"
                         />
                       </td>
 
                       {/* ID */}
                       <td className="py-2.5 px-3 font-mono font-medium text-slate-800">
-                        {emp.id}
+                        <div className="flex items-center gap-1.5">
+                          <span>{emp.id}</span>
+                          {isError && (
+                            <button
+                              type="button"
+                              onClick={() => setActiveIssueModal(emp)}
+                              className="p-0.5 rounded cursor-pointer text-red-600 hover:bg-red-100"
+                              title="View blocking error details"
+                            >
+                              <AlertCircle className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       {/* Name */}
                       <td className="py-2.5 px-3 font-semibold text-slate-900">
                         {emp.name}
+                      </td>
+
+                      {/* Pay Period */}
+                      <td className="py-2.5 px-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                          {emp.payPeriod || '—'}
+                        </span>
                       </td>
 
                       {/* Designation */}

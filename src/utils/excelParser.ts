@@ -347,6 +347,41 @@ function buildTier(fixedVal: any, earnedVal: any, arrearsVal: any = null): Earni
   };
 }
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function normalizePayPeriod(val: any): string {
+  if (val === null || val === undefined || val === '') return '';
+
+  if (typeof val === 'number' && val > 20000 && val < 80000) {
+    const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+    if (!isNaN(date.getTime())) {
+      return `${MONTH_NAMES[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+    }
+  }
+
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return `${MONTH_NAMES[val.getMonth()]} ${val.getFullYear()}`;
+  }
+
+  const str = parseStringOrEmpty(val).replace(/\s+/g, ' ');
+  if (!str) return '';
+
+  // Convert full DD-MM-YYYY / YYYY-MM-DD date strings to "Month YYYY"
+  const parts = str.split(/[/.-]/);
+  if (parts.length === 3 && parts.every((p) => /^\d+$/.test(p))) {
+    const yearNum = parts[0].length === 4 ? Number(parts[0]) : Number(parts[2]);
+    const monthNum = Number(parts[1]);
+    if (monthNum >= 1 && monthNum <= 12 && yearNum >= 1900) {
+      return `${MONTH_NAMES[monthNum - 1]} ${yearNum}`;
+    }
+  }
+
+  return str;
+}
+
 /**
  * Transforms raw parsed rows into strongly typed EmployeeRecord array matching Form T Wages Slip.
  * Strictly adheres to ZERO ASSUMPTION FILLING: empty Excel boxes remain empty ('—' on template).
@@ -356,7 +391,8 @@ export function transformRowsToEmployees(
   _mappings?: ColumnMapping[],
   settings?: CompanySettings
 ): EmployeeRecord[] {
-  const seenEmpIds = new Set<string>();
+  // Track composite (Employee ID + Pay Period) so the same employee in different months is valid
+  const seenEmpPeriodKeys = new Set<string>();
 
   return rawRows.map((row, index) => {
     // 1. Employee Summary Identifiers (strictly empty if not provided in sheet)
@@ -379,8 +415,8 @@ export function transformRowsToEmployees(
     const paidDays = parseNumberOrNull(findRowValue(row, ['paid days', 'no of wkgs days during month', 'present days', 'worked days']));
     const lopDays = parseNumberOrNull(findRowValue(row, ['lop days', 'loss of pay', 'lop']));
 
-    const payPeriod = parseStringOrEmpty(findRowValue(row, ['pay period', 'wage period monthly', 'month'])) || settings?.defaultPayPeriod || '';
-    const payDate = parseStringOrEmpty(findRowValue(row, ['pay date', 'payment date'])) || settings?.defaultPayDate || '';
+    const payPeriod = normalizePayPeriod(findRowValue(row, ['pay period', 'wage period monthly', 'month'])) || settings?.defaultPayPeriod || '';
+    const payDate = formatExcelDate(findRowValue(row, ['pay date', 'payment date'])) || settings?.defaultPayDate || '';
     const taxRegime = parseStringOrEmpty(findRowValue(row, ['tax regime', 'regime']));
     const ptState = parseStringOrEmpty(findRowValue(row, ['professional tax state', 'pt state', 'state']));
 
@@ -462,27 +498,30 @@ export function transformRowsToEmployees(
     const sourceTotalDed = parseNumberOrNull(findRowValue(row, ['deductions - total deductions', 'total deductions', 'total deduction']));
     const totalDeductions = sourceTotalDed !== null ? sourceTotalDed : calculatedDeductions;
 
-    // 5. Net Payable
+    // 5. Net Payable (Excel sheet is the authoritative source of truth)
     const sourceNet = parseNumberOrNull(findRowValue(row, ['total net payable', 'net payable', 'net salary', 'earned - net salary']));
     const calculatedNetPayable = sourceNet !== null ? sourceNet : Math.round((grossEarnings - totalDeductions) * 100) / 100;
-    const netMismatch = sourceNet !== null && Math.abs(sourceNet - (grossEarnings - totalDeductions)) > 1.0;
+    const netMismatch = false;
 
-    // 6. Validation
+    // 6. Validation (Blocking checks only: missing ID, missing Name, or exact duplicate ID + same Pay Period)
     const validationErrors: string[] = [];
     const validationWarnings: string[] = [];
 
+    const dedupKey = `${id.trim().toUpperCase()}__${payPeriod.trim().toLowerCase()}`;
     if (!id) validationErrors.push('Missing Employee ID');
-    if (seenEmpIds.has(id)) validationErrors.push(`Duplicate Employee ID: ${id}`);
-    seenEmpIds.add(id);
+    if (id && seenEmpPeriodKeys.has(dedupKey)) {
+      validationErrors.push(`Duplicate entry for ${id} in ${payPeriod || 'same period'}`);
+    }
+    if (id) seenEmpPeriodKeys.add(dedupKey);
 
     if (!name) validationErrors.push('Missing Employee Name');
-    if (basicTier.total !== null && basicTier.total <= 0) validationWarnings.push('Basic salary is zero');
-    if (netMismatch) validationWarnings.push(`Calculated Net (₹${grossEarnings - totalDeductions}) differs from sheet Net (₹${sourceNet})`);
 
-    const validationStatus = validationErrors.length > 0 ? 'error' : validationWarnings.length > 0 ? 'warning' : 'ready';
+    const validationStatus = validationErrors.length > 0 ? 'error' : 'ready';
+    const recordKey = `${id || `ROW${index + 1}`}__${(payPeriod || 'default').replace(/\s+/g, '_')}__${index}`;
 
     return {
       id,
+      recordKey,
       name,
       sex,
       doj,

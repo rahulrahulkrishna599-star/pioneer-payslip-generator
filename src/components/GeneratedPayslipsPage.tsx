@@ -828,7 +828,8 @@ export const GeneratedPayslipsPage: React.FC<GeneratedPayslipsPageProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-800">
-                    {paginatedEmployees.map((emp) => {
+                    {paginatedEmployees.map((emp, idx) => {
+                      const rowKey = emp.recordKey || `${emp.id}_${emp.payPeriod}_${idx}`;
                       const isSelected = selectedEmployeeIds.has(emp.id);
                       const initials = emp.name
                         .split(' ')
@@ -843,7 +844,7 @@ export const GeneratedPayslipsPage: React.FC<GeneratedPayslipsPageProps> = ({
 
                       return (
                         <tr 
-                          key={emp.id} 
+                          key={rowKey} 
                           className={`hover:bg-slate-50/80 transition-colors ${
                             isSelected ? 'bg-emerald-50/40' : ''
                           }`}
