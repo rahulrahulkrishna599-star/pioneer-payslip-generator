@@ -34,12 +34,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Generate Payslips',
       icon: <FileSpreadsheet className="w-4 h-4" />,
     },
-    {
-      id: 'history',
-      label: 'Generated Payslips',
-      icon: <Files className="w-4 h-4" />,
-      badge: activeBatchCount > 0 ? activeBatchCount : undefined,
-    },
+    ...(isAdmin
+      ? [
+          {
+            id: 'history' as AppTab,
+            label: 'Generated Payslips',
+            icon: <Files className="w-4 h-4" />,
+            badge: activeBatchCount > 0 ? activeBatchCount : undefined,
+          },
+        ]
+      : []),
   ];
 
   const adminNav: { id: AppTab; label: string; icon: React.ReactNode }[] = [

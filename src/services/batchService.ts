@@ -144,18 +144,49 @@ export async function saveBatchToSupabase(
       batchHeaderPayload.id = batch.id;
     }
 
-    const { data: insertedBatch, error: batchErr } = await supabase
+    // Check if an existing batch for this exact pay_period already exists in Supabase
+    const { data: existingBatch } = await supabase
       .from('payroll_batches')
-      .insert([batchHeaderPayload])
       .select('id')
-      .single();
+      .eq('pay_period', batch.payPeriod)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (batchErr || !insertedBatch) {
-      console.error('Error inserting batch to Supabase:', batchErr);
-      return null;
+    let assignedBatchId: string;
+
+    if (existingBatch) {
+      assignedBatchId = existingBatch.id;
+      // Update existing batch header with updated figures and file
+      await supabase
+        .from('payroll_batches')
+        .update({
+          file_name: batch.fileName,
+          total_count: batch.totalCount,
+          success_count: batch.successCount,
+          failed_count: batch.failedCount,
+          gross_payout: grossPayout,
+          total_deductions: totalDeductions,
+          net_payout: netPayout,
+          ...(zipStoragePath ? { zip_storage_path: zipStoragePath } : {}),
+        })
+        .eq('id', assignedBatchId);
+
+      // Clean existing employee records for this batch to avoid duplicates
+      await supabase.from('payroll_employees').delete().eq('batch_id', assignedBatchId);
+    } else {
+      const { data: insertedBatch, error: batchErr } = await supabase
+        .from('payroll_batches')
+        .insert([batchHeaderPayload])
+        .select('id')
+        .single();
+
+      if (batchErr || !insertedBatch) {
+        console.error('Error inserting batch to Supabase:', batchErr);
+        return null;
+      }
+      assignedBatchId = insertedBatch.id;
     }
-
-    const assignedBatchId = insertedBatch.id;
 
     // 3. Bulk Insert Employee Rows
     const empRows = batch.employees.map((emp) => ({

@@ -18,6 +18,7 @@ interface GenerationModalProps {
   settings: CompanySettings;
   template?: PayslipTemplate;
   payPeriod: string;
+  isAdmin?: boolean;
   onClose: () => void;
   onViewGeneratedBatches: () => void;
 }
@@ -30,6 +31,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({
   settings,
   template,
   payPeriod,
+  isAdmin = false,
   onClose,
   onViewGeneratedBatches,
 }) => {
@@ -116,24 +118,26 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({
               </p>
             </div>
 
-            {/* Two Primary Action Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            {/* Primary Action Buttons */}
+            <div className={`grid grid-cols-1 ${isAdmin ? 'sm:grid-cols-2' : ''} gap-3 pt-2`}>
               <button
                 type="button"
                 onClick={handleDownloadZip}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors cursor-pointer"
               >
                 <Download className="w-4 h-4" />
                 <span>Download All as ZIP</span>
               </button>
-              <button
-                type="button"
-                onClick={onViewGeneratedBatches}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors"
-              >
-                <Files className="w-4 h-4" />
-                <span>View Generated Payslips</span>
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={onViewGeneratedBatches}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                >
+                  <Files className="w-4 h-4" />
+                  <span>View Generated Payslips</span>
+                </button>
+              )}
             </div>
 
             {/* Individual PDFs List / Preview */}

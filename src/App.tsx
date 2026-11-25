@@ -84,6 +84,13 @@ export function App() {
   // Draft & Cloud Session State
   const [pendingDraft, setPendingDraft] = useState<PayrollDraft | null>(null);
 
+  // Role Access Guard: Ensure non-admins cannot stay on restricted tabs
+  useEffect(() => {
+    if (!isAdmin && (currentTab === 'history' || currentTab === 'templates' || currentTab === 'team')) {
+      setCurrentTab('generate');
+    }
+  }, [isAdmin, currentTab]);
+
   // 1. Initial Load: Sync from Supabase on mount
   useEffect(() => {
     let isMounted = true;
@@ -420,6 +427,8 @@ export function App() {
               recentBatches={batches}
               settings={settings}
               activeTemplateName={template.name}
+              template={template}
+              isAdmin={isAdmin}
             />
           )}
 
@@ -521,8 +530,8 @@ export function App() {
             />
           )}
 
-          {/* Tab 4: Generated Batches History */}
-          {currentTab === 'history' && (
+          {/* Tab 4: Generated Batches History (Admin Only) */}
+          {currentTab === 'history' && isAdmin && (
             <GeneratedPayslipsPage
               batches={batches}
               settings={settings}
@@ -554,10 +563,13 @@ export function App() {
         settings={settings}
         template={template}
         payPeriod={template.payPeriod || targetGenerationEmployees[0]?.payPeriod || settings.defaultPayPeriod}
+        isAdmin={isAdmin}
         onClose={() => setIsGenerating(false)}
         onViewGeneratedBatches={() => {
           setIsGenerating(false);
-          setCurrentTab('history');
+          if (isAdmin) {
+            setCurrentTab('history');
+          }
         }}
       />
     </div>

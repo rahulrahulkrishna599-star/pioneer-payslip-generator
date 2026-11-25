@@ -193,7 +193,6 @@ export const PreviewStep: React.FC<PreviewStepProps> = ({
                 type="button"
                 onClick={async () => {
                   await downloadIndividualPayslipPdf(currentEmployee, settings, template);
-                  await saveIndividualEmployeeToSupabase(currentEmployee, template, settings);
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md border border-slate-200 transition-colors"
                 title="Download this employee's payslip PDF"
