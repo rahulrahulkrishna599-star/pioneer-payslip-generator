@@ -4,6 +4,14 @@ import { UserProfile, AppRole } from '../types';
 const LOCAL_STORAGE_USERS_KEY = 'pioneer_team_profiles_cache_v1';
 const ACTIVE_SESSION_ID_KEY = 'pioneer_active_session_id';
 
+// Track in-flight signIn so onAuthStateChange/initSession never overwrites localStorage with stale metadata
+let signInInProgress = false;
+let userProfilesTableMissing = false;
+
+export function isSignInInProgress(): boolean {
+  return signInInProgress;
+}
+
 export function generateSessionId(): string {
   return 'sess_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36);
 }
@@ -55,82 +63,112 @@ export function normalizeLoginIdentifier(id: string): string {
  */
 export async function signIn(identifier: string, password: string): Promise<{ profile: UserProfile }> {
   const normalizedEmail = normalizeLoginIdentifier(identifier);
+  signInInProgress = true;
 
-  // 1. Authenticate with Supabase
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: normalizedEmail,
-    password: password,
-  });
-
-  if (error || !data.user) {
-    // If Supabase auth fails, check if logging in with the default admin credentials locally
-    if (
-      normalizedEmail === 'admin@pioneercorp.in' &&
-      password === 'Pioneer@2026!Admin'
-    ) {
-      saveProfileToLocalCache(DEFAULT_SUPER_ADMIN);
-      return { profile: DEFAULT_SUPER_ADMIN };
-    }
-    throw new Error(error?.message || 'Invalid email or password. Please verify your credentials.');
-  }
-
-  // 2. Fetch User Profile
-  let profile = await fetchUserProfile(data.user.id);
-
-  if (!profile) {
-    // If profile row not yet created in table, construct from user metadata
-    profile = {
-      id: data.user.id,
-      email: data.user.email || normalizedEmail,
-      fullName: data.user.user_metadata?.full_name || 'HR Team Member',
-      role: (data.user.user_metadata?.role as AppRole) || 'operator',
-      isActive: true,
-      createdAt: data.user.created_at,
-    };
-    saveProfileToLocalCache(profile);
-  }
-
-  // 3. Check if account is active
-  if (!profile.isActive) {
-    clearLocalSessionId();
-    await supabase.auth.signOut();
-    throw new Error('Your account has been deactivated. Please contact your Pioneer HR Administrator.');
-  }
-
-  // 4. Register Single-Active Session ID
+  // Pre-generate and store the new session ID BEFORE signInWithPassword so
+  // concurrent onAuthStateChange('SIGNED_IN') handlers never adopt a stale ID.
+  const previousLocalSessionId = getLocalSessionId();
   const newSessionId = generateSessionId();
   setLocalSessionId(newSessionId);
 
-  // Sync to Supabase auth user metadata so any other active device detects the new session
   try {
-    await supabase.auth.updateUser({
-      data: {
-        active_session_id: newSessionId,
-        session_created_at: new Date().toISOString(),
-      },
+    // 1. Authenticate with Supabase
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password: password,
     });
-  } catch (err) {
-    console.warn('Could not register active_session_id:', err);
+
+    if (error || !data.user) {
+      // Restore previous session ID on failed login
+      if (previousLocalSessionId) setLocalSessionId(previousLocalSessionId);
+      else clearLocalSessionId();
+
+      // If Supabase auth fails, check if logging in with the default admin credentials locally
+      if (
+        normalizedEmail === 'admin@pioneercorp.in' &&
+        password === 'Pioneer@2026!Admin'
+      ) {
+        saveProfileToLocalCache(DEFAULT_SUPER_ADMIN);
+        return { profile: DEFAULT_SUPER_ADMIN };
+      }
+      throw new Error(error?.message || 'Invalid email or password. Please verify your credentials.');
+    }
+
+    // 2. Fetch User Profile (fallback immediately to authoritative auth user_metadata)
+    let profile = await fetchUserProfile(data.user.id);
+    const meta = data.user.user_metadata || {};
+
+    if (!profile) {
+      const isSuperAdminEmail = data.user.email === 'admin@pioneercorp.in';
+      profile = {
+        id: data.user.id,
+        email: data.user.email || normalizedEmail,
+        fullName: meta.full_name || (isSuperAdminEmail ? 'Pioneer HR Administrator' : 'HR Team Member'),
+        role: (meta.role as AppRole) || (isSuperAdminEmail ? 'admin' : 'operator'),
+        isActive: meta.is_active !== false,
+        createdAt: data.user.created_at,
+      };
+      saveProfileToLocalCache(profile);
+    }
+
+    // 3. Check if account is active
+    if (!profile.isActive) {
+      clearLocalSessionId();
+      await supabase.auth.signOut({ scope: 'local' });
+      throw new Error('Your account has been deactivated. Please contact your Pioneer HR Administrator.');
+    }
+
+    // 4. Register Single-Active Session ID on Supabase user metadata
+    let syncedToServer = false;
+    for (let attempt = 0; attempt < 2 && !syncedToServer; attempt++) {
+      try {
+        const { error: updateErr } = await supabase.auth.updateUser({
+          data: {
+            active_session_id: newSessionId,
+            session_created_at: new Date().toISOString(),
+          },
+        });
+        if (!updateErr) {
+          syncedToServer = true;
+        } else {
+          console.warn(`Attempt ${attempt + 1} to register active_session_id failed:`, updateErr.message);
+        }
+      } catch (err) {
+        console.warn(`Attempt ${attempt + 1} to register active_session_id threw:`, err);
+      }
+    }
+
+    // If updateUser failed on both tries, align local session ID with server metadata to avoid false self-kickout
+    if (!syncedToServer && meta.active_session_id) {
+      setLocalSessionId(meta.active_session_id);
+    }
+
+    // Also update user_profiles table if present
+    if (!userProfilesTableMissing) {
+      try {
+        const { error: profErr } = await supabase.from('user_profiles').update({
+          active_session_id: newSessionId,
+          updated_at: new Date().toISOString(),
+        }).eq('id', data.user.id);
+        if (profErr && (profErr.code === 'PGRST205' || profErr.message?.includes('schema cache'))) {
+          userProfilesTableMissing = true;
+        }
+      } catch {}
+    }
+
+    return { profile };
+  } finally {
+    signInInProgress = false;
   }
-
-  // Also update user_profiles table if present
-  try {
-    await supabase.from('user_profiles').update({
-      active_session_id: newSessionId,
-      updated_at: new Date().toISOString(),
-    }).eq('id', data.user.id);
-  } catch {}
-
-  return { profile };
 }
 
 /**
- * Signs out the current user and clears local session cache.
+ * Signs out the current user locally and clears local session cache.
  */
 export async function signOut(): Promise<void> {
   clearLocalSessionId();
   try {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
   } catch (err) {
     console.warn('Sign out warning:', err);
   }
@@ -140,30 +178,32 @@ export async function signOut(): Promise<void> {
  * Fetches the user profile from Supabase table or user metadata.
  */
 export async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
-  try {
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+  if (!userProfilesTableMissing) {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (!error && data) {
-      return {
-        id: data.id,
-        email: data.email,
-        fullName: data.full_name,
-        role: data.role as AppRole,
-        isActive: data.is_active,
-        createdAt: data.created_at,
-      };
+      if (error && (error.code === 'PGRST205' || error.message?.includes('schema cache'))) {
+        userProfilesTableMissing = true;
+      } else if (!error && data) {
+        return {
+          id: data.id,
+          email: data.email,
+          fullName: data.full_name,
+          role: data.role as AppRole,
+          isActive: data.is_active,
+          createdAt: data.created_at,
+        };
+      }
+    } catch (err) {
+      console.warn('Could not read user_profiles table:', err);
     }
-  } catch (err) {
-    console.warn('Could not read user_profiles table:', err);
   }
 
-  // Fallback to local cache
-  const cached = getLocalCachedProfiles();
-  return cached.find((p) => p.id === userId) || null;
+  return null;
 }
 
 /**
@@ -176,8 +216,8 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     return null;
   }
 
-  // Ensure local session ID is initialized if not present
-  if (!getLocalSessionId()) {
+  // Ensure local session ID is initialized on session restore (only when not mid-signIn)
+  if (!signInInProgress && !getLocalSessionId()) {
     const existingSessionId = authUser.user_metadata?.active_session_id || generateSessionId();
     setLocalSessionId(existingSessionId);
     if (!authUser.user_metadata?.active_session_id) {
@@ -201,7 +241,7 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     email: authUser.email || (isSuperAdminEmail ? 'admin@pioneercorp.in' : ''),
     fullName: displayName,
     role: assignedRole,
-    isActive: true,
+    isActive: meta.is_active !== false,
     createdAt: authUser.created_at,
   };
   saveProfileToLocalCache(fallbackProfile);

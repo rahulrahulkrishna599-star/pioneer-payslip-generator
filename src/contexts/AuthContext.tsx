@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { UserProfile, AppRole } from '../types';
 import { 
   signIn, 
@@ -6,7 +6,7 @@ import {
   getCurrentUserProfile, 
   getLocalSessionId, 
   clearLocalSessionId,
-  DEFAULT_SUPER_ADMIN 
+  isSignInInProgress
 } from '../services/authService';
 import { supabase } from '../lib/supabase';
 
@@ -31,21 +31,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSessionSuperseded, setIsSessionSuperseded] = useState<boolean>(false);
   const [supersededAt, setSupersededAt] = useState<string | null>(null);
+  const lastLoginCompletedAtRef = useRef<number>(0);
 
   // 1. Concurrency Check: Verify active_session_id on server matches this browser's local session
   const checkSessionConcurrency = useCallback(async () => {
     try {
+      // Skip checks while a fresh sign-in is in flight or within 5s grace window
+      if (isSignInInProgress() || Date.now() - lastLoginCompletedAtRef.current < 5000) {
+        return;
+      }
+
       const localId = getLocalSessionId();
       if (!localId) return;
 
       const { data: { user: currentAuthUser } } = await supabase.auth.getUser();
       if (!currentAuthUser) return;
 
+      // Re-verify localId did not change while getUser() was in flight
+      if (isSignInInProgress() || getLocalSessionId() !== localId) {
+        return;
+      }
+
       const remoteSessionId = currentAuthUser.user_metadata?.active_session_id;
       if (remoteSessionId && remoteSessionId !== localId) {
-        console.warn('⚠️ [Pioneer Auth] Concurrent session detected on another device/browser. Invalidation triggered.');
+        console.warn('⚠️ [Pioneer Auth] Concurrent session detected on another device/browser. Closing local session only.');
         clearLocalSessionId();
-        await supabase.auth.signOut();
+        // IMPORTANT: Use scope: 'local' so an evicted tab never globally revokes the newly active session!
+        await supabase.auth.signOut({ scope: 'local' });
         setUser(null);
         setIsSessionSuperseded(true);
         setSupersededAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -78,9 +90,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Listen for cross-tab auth state changes (login, logout, token refresh)
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
+      if (event === 'SIGNED_OUT') {
         if (isMounted) setUser(null);
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        return;
+      }
+      if (!session) {
+        if (event !== 'INITIAL_SESSION' && isMounted) {
+          setUser(null);
+        }
+        return;
+      }
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        // While signIn() is committing active_session_id, let login() set the final profile state
+        if (isSignInInProgress()) return;
         const profile = await getCurrentUserProfile();
         if (isMounted) setUser(profile);
       }
@@ -124,6 +146,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsSessionSuperseded(false);
     setSupersededAt(null);
     const { profile } = await signIn(identifier, password);
+    lastLoginCompletedAtRef.current = Date.now();
     setUser(profile);
   };
 
